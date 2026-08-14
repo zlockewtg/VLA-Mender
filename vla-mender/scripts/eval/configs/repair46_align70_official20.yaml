@@ -1,0 +1,40 @@
+schema_version: 1
+
+checkpoint: /mnt/public/tgy/capx-aspire/aspire/vla_mender/openpi/checkpoints/pi0_libero_goal_task0_repair46_align70_native_crossboundary_20hz_lr2p5e5_4k_h50_v1/goal0_r46_a70_lr2p5e5_v1/4000
+config_name: pi0_libero_goal_task0_repair46_align70_native_crossboundary_20hz_lr2p5e5_4k_h50_v1
+openpi_source: /mnt/public/tgy/capx-aspire/aspire/vla_mender/openpi
+python: /opt/venv/openpi/bin/python
+output_parent: /mnt/public/tgy/data
+
+tasks:
+  - key: goal0
+    suite: libero_goal
+    task_id: 0
+
+initial_states:
+  provider: official
+  count: 20
+  indices: null
+
+evaluation:
+  seed: 7
+  policy_seed_offset: 0
+  trials_per_state: 1
+  control_freq: 20
+  max_steps: 500
+  num_steps_wait: 10
+  action_chunk: 5
+  inference_steps: 5
+  binary_gripper: true
+  gripper_hysteresis_threshold: 0.2
+  compile_mode: none
+
+resources:
+  gpus: [0, 1, 2, 3]
+  num_envs: 4
+
+artifacts:
+  mode: lerobot
+  training_schema_only: true
+  save_images: false
+  image_writer_threads: 8

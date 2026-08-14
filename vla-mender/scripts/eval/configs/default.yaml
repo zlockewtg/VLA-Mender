@@ -1,0 +1,48 @@
+schema_version: 1
+
+checkpoint: /mnt/public/tgy/ckpts/RLinf-Pi0-LIBERO-Spatial-Object-Goal-SFT
+config_name: pi0_libero
+openpi_source: /mnt/public/tgy/VLA-Mender/third_party/openpi
+python: /opt/venv/openpi/bin/python
+output_parent: /mnt/public/tgy/data/libero_eval
+
+tasks:
+  - key: goal0
+    suite: libero_goal
+    task_id: 0
+
+initial_states:
+  # There is intentionally no implicit provider in eval.py. Every profile must
+  # select official, randomized_bddl, or manifest explicitly.
+  provider: official
+  count: 50
+  indices: null
+  manifest: null
+  cache_root: /mnt/public/tgy/data/libero_randomized_scenes
+  seed_start: 100000
+  wait_steps: 10
+  validation_hold_steps: 5
+  maximum_stabilization_drift: 0.05
+
+evaluation:
+  seed: 7
+  policy_seed_offset: 0
+  trials_per_state: 1
+  control_freq: 20
+  max_steps: 300
+  num_steps_wait: 10
+  action_chunk: 5
+  inference_steps: 5
+  binary_gripper: false
+  gripper_hysteresis_threshold: 0.2
+  compile_mode: none
+
+resources:
+  gpus: [0, 1, 2, 3]
+  num_envs: 4
+
+artifacts:
+  mode: lerobot
+  training_schema_only: true
+  save_images: false
+  image_writer_threads: 8

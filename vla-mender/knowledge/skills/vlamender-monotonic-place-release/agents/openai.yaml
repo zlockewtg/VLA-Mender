@@ -1,0 +1,4 @@
+interface:
+  display_name: "Monotonic Place & Release"
+  short_description: "Stable high-align, vertical-descent, terminal-release guidance"
+  default_prompt: "Use $vlamender-monotonic-place-release to repair a drifting, repetitive, or over-retreating placement suffix."

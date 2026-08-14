@@ -1,0 +1,19 @@
+[submodule "third_party/contact_graspnet_pytorch"]
+	path = third_party/contact_graspnet_pytorch
+	url = https://github.com/uynitsuj/contact_graspnet_pytorch.git
+	branch = main
+[submodule "third_party/sam3"]
+	path = third_party/sam3
+	url = https://github.com/Max-Fu/sam3.git
+	branch = main
+[submodule "third_party/LIBERO-PRO"]
+	path = third_party/LIBERO-PRO
+	url = https://github.com/uynitsuj/LIBERO-PRO.git
+	branch = master
+[submodule "third_party/libero_dependencies/robosuite"]
+	path = third_party/libero_dependencies/robosuite
+	url = https://github.com/Max-Fu/robosuite.git
+	branch = maxf/egl_context
+[submodule "third_party/openpi"]
+	path = third_party/openpi
+	url = https://github.com/Physical-Intelligence/openpi.git

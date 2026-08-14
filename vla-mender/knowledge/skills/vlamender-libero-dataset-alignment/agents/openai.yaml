@@ -1,0 +1,4 @@
+interface:
+  display_name: "VLA-Mender LIBERO Dataset Alignment"
+  short_description: "Convert VLA-Mender rollouts to LIBERO v2.0 Parquet"
+  default_prompt: "Use $vlamender-libero-dataset-alignment to convert and validate a VLA-Mender LeRobot dataset against a LIBERO v2.0 reference dataset."

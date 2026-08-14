@@ -1,0 +1,27 @@
+# Python and uv environments
+.venv/
+.venv-*/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.cache/
+.runtime/
+.uv-cache/
+
+# Local LIBERO configuration
+.libero/
+
+# Runtime assets and model weights are provisioned separately.
+third_party/LIBERO-PRO/libero/libero/assets/
+third_party/libero_dependencies/robosuite/robosuite/models/assets/
+third_party/contact_graspnet_pytorch/checkpoints/
+third_party/sam3/checkpoints/
+
+# Generated outputs
+outputs/
+*.log
+
+
+.runtime/
