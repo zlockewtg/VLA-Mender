@@ -96,6 +96,7 @@ def _run_worker(
         settings.task.task_id,
         settings.controller.source_control_space,
         settings.rollout.control_frequency_hz,
+        libero_root=settings.backend.libero_root,
     )
     task_description = settings.task.task_description or runtime.task_description()
     states = {spec.initial_state_index: state for spec, state in items}

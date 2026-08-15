@@ -245,6 +245,7 @@ def aggregate_episode_results(episodes: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "episodes": len(ordered),
         "successes": len(successes),
+        "failures": len(failed),
         "success_rate": len(successes) / len(ordered) if ordered else 0.0,
         "successful_initial_state_indices": [
             int(item["initial_state_index"]) for item in successes

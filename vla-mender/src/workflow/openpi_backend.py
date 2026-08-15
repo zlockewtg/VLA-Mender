@@ -127,6 +127,9 @@ def openpi_runtime_preflight(
         "checkpoint": str(checkpoint),
         "weights": str(weight_path),
         "norm_stats": str(norm_stats / "norm_stats.json"),
+        "libero_root": (
+            str(backend.libero_root.resolve()) if backend.libero_root else None
+        ),
     }
 
 

@@ -34,4 +34,6 @@ backend:
   openpi_environment: /absolute/path/to/VLA-Mender/.venv-openpi
   openpi_source: ../../../../third_party/openpi
   openpi_commit: 15a9616a00943ada6c20a0f158e3adb39df2ccac
+  # Overrides LIBERO's process-global ~/.libero/config.yaml in memory.
+  libero_root: /absolute/path/to/LIBERO-PRO/libero/libero
   # openpi_norm_stats: /absolute/path/to/norm_stats.json

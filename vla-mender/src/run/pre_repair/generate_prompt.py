@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 from pathlib import Path
 
 from workflow.failure_diagnosis import write_task_prompt
@@ -34,20 +32,6 @@ def main(argv: list[str] | None = None) -> None:
         filename=destination.name,
         run_root=run_root,
         settings_path=settings_source,
-    )
-    manifest = {
-        "schema_version": 1,
-        "stage": "prompt",
-        "settings_fingerprint": settings.fingerprint(),
-        "settings": str(settings_source),
-        "run_root": str(run_root),
-        "prompt": str(prompt_path),
-        "prompt_sha256": hashlib.sha256(prompt_path.read_bytes()).hexdigest(),
-        "requested_settings": settings.as_dict(),
-    }
-    manifest_path = destination.with_name(destination.stem + ".manifest.json")
-    manifest_path.write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     print(prompt_path)
 

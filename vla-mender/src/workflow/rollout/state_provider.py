@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from ..libero_runtime import LiberoRuntime
+from ..libero_runtime import LiberoRuntime, libero_imports
 from ..parameters import ExperimentSettings
 
 
@@ -238,6 +238,7 @@ def _sample_workflow_randomized_states(
         control_freq=settings.rollout.control_frequency_hz,
         maximum_stabilization_drift=0.05,
         max_attempts=settings.initial_states.count * 20,
+        libero_root=settings.backend.libero_root,
     )
     entries = [
         {
@@ -264,6 +265,7 @@ def generate_initial_states(
             settings.task.task_id,
             settings.controller.source_control_space,
             settings.rollout.control_frequency_hz,
+            libero_root=settings.backend.libero_root,
         )
         return _load_workflow_state_manifest(
             settings.initial_states.state_manifest,
@@ -282,6 +284,7 @@ def generate_initial_states(
         settings.task.task_id,
         settings.controller.source_control_space,
         settings.rollout.control_frequency_hz,
+        libero_root=settings.backend.libero_root,
     )
     states = runtime.official_initial_states()[:count].copy()
     if len(states) < count:
@@ -306,19 +309,11 @@ class RejectedSceneError(RuntimeError):
     """A deterministic placement seed is unsuitable for evaluation."""
 
 
-def _generator_imports() -> tuple[Any, Any, Any]:
-    try:
-        from libero.libero import benchmark, get_libero_path
-        from libero.libero.envs import OffScreenRenderEnv
-    except ImportError as exc:
-        if exc.name and not (
-            exc.name == "libero.libero" or exc.name.startswith("libero.libero.")
-        ):
-            raise
-        from libero import benchmark
-        from libero.envs import OffScreenRenderEnv
-        from libero.utils import get_libero_path
-    return benchmark, get_libero_path, OffScreenRenderEnv
+def _generator_imports(
+    libero_root: Path | None = None,
+) -> tuple[Any, Any, Any]:
+    benchmark, env_class, get_libero_path = libero_imports(libero_root)
+    return benchmark, get_libero_path, env_class
 
 
 def _body_pose(env: Any, body_name: str) -> np.ndarray:
@@ -528,6 +523,7 @@ def generate_randomized_states(
     control_freq: int,
     maximum_stabilization_drift: float,
     max_attempts: int,
+    libero_root: Path | None = None,
 ) -> dict[str, Any]:
     """Build or reuse a validated deterministic randomized-state cache."""
 
@@ -548,7 +544,7 @@ def generate_randomized_states(
         print(f"Reusing randomized scene cache: {output}", flush=True)
         return cached
 
-    benchmark, get_libero_path, env_class = _generator_imports()
+    benchmark, get_libero_path, env_class = _generator_imports(libero_root)
     benchmark_dict = benchmark.get_benchmark_dict()
     if suite_name not in benchmark_dict:
         raise ValueError(f"unknown LIBERO suite: {suite_name}")
@@ -711,6 +707,7 @@ def _build_randomized_state_bundle(
     control_freq: int,
     maximum_stabilization_drift: float,
     max_attempts: int,
+    libero_root: Path | None = None,
 ) -> RandomizedStateBundle:
     """Run the cache generator in a temporary materialization for workflows."""
 
@@ -727,6 +724,7 @@ def _build_randomized_state_bundle(
             control_freq=control_freq,
             maximum_stabilization_drift=maximum_stabilization_drift,
             max_attempts=max_attempts,
+            libero_root=libero_root,
         )
         states = np.load(output / "states.npy", allow_pickle=False).copy()
         validation = json.loads(

@@ -19,17 +19,23 @@ def _resolve(base: Path, value: Any, label: str) -> Path:
 class ImageSource:
     video: Path | None = None
     column: str | None = None
+    continuity_video: Path | None = None
 
     @classmethod
     def parse(cls, base: Path, value: Mapping[str, Any], label: str) -> "ImageSource":
-        unknown = set(value) - {"video", "column"}
+        unknown = set(value) - {"video", "column", "continuity_video"}
         if unknown:
             raise ValueError(f"unknown {label} image-source keys: {sorted(unknown)}")
         video = _resolve(base, value["video"], f"{label}.video") if value.get("video") else None
         column = str(value["column"]) if value.get("column") else None
         if (video is None) == (column is None):
             raise ValueError(f"{label} requires exactly one of video or column")
-        return cls(video=video, column=column)
+        continuity_video = (
+            _resolve(base, value["continuity_video"], f"{label}.continuity_video")
+            if value.get("continuity_video")
+            else None
+        )
+        return cls(video=video, column=column, continuity_video=continuity_video)
 
 
 @dataclass(frozen=True)
@@ -60,10 +66,11 @@ class EpisodeSource:
     restart_frame: int
     task_index: int
     task: str
-    prefix: SegmentSource
+    prefix: SegmentSource | None
     repair: SegmentSource
     continuity: dict[str, Any]
     metadata: dict[str, Any] = field(default_factory=dict)
+    mode: str = "prefix_plus_repair"
 
 
 def _resolve_continuity(base: Path, value: Mapping[str, Any]) -> dict[str, Any]:
@@ -91,25 +98,40 @@ def load_episode_manifest(path: Path) -> list[EpisodeSource]:
     for position, item in enumerate(rows):
         if not isinstance(item, Mapping):
             raise ValueError(f"episode {position} is not an object")
-        required = {"source_episode_id", "restart_frame", "task_index", "task", "prefix", "repair"}
+        mode = str(item.get("mode", "prefix_plus_repair"))
+        if mode not in {"prefix_plus_repair", "repair_only"}:
+            raise ValueError(f"episode {position} has unsupported mode: {mode}")
+        required = {"source_episode_id", "task_index", "task", "repair"}
+        if mode == "prefix_plus_repair":
+            required.update({"restart_frame", "prefix"})
         missing = required - set(item)
         if missing:
             raise ValueError(f"episode {position} missing keys: {sorted(missing)}")
-        unknown = set(item) - required - {"continuity", "metadata"}
+        unknown = set(item) - required - {"continuity", "metadata", "mode"}
         if unknown:
             raise ValueError(f"episode {position} has unknown keys: {sorted(unknown)}")
+        prefix = (
+            SegmentSource.parse(base, item["prefix"], f"episode[{position}].prefix")
+            if item.get("prefix") is not None
+            else None
+        )
         episode = EpisodeSource(
             source_episode_id=item["source_episode_id"],
-            restart_frame=int(item["restart_frame"]),
+            restart_frame=int(item.get("restart_frame", 0)),
             task_index=int(item["task_index"]),
             task=str(item["task"]),
-            prefix=SegmentSource.parse(base, item["prefix"], f"episode[{position}].prefix"),
+            prefix=prefix,
             repair=SegmentSource.parse(base, item["repair"], f"episode[{position}].repair"),
             continuity=_resolve_continuity(base, item.get("continuity") or {}),
             metadata=dict(item.get("metadata") or {}),
+            mode=mode,
         )
-        if episode.restart_frame <= 0:
+        if mode == "prefix_plus_repair" and episode.restart_frame <= 0:
             raise ValueError(f"episode {position} restart_frame must be positive")
+        if mode == "repair_only" and (episode.restart_frame != 0 or episode.prefix is not None):
+            raise ValueError(
+                f"episode {position} repair_only must omit prefix and use restart_frame 0"
+            )
         episodes.append(episode)
     identities = [str(item.source_episode_id) for item in episodes]
     if len(identities) != len(set(identities)):

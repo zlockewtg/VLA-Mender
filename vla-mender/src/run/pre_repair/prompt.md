@@ -16,6 +16,7 @@ or execute a repair policy.
 - Runtime backend: `{{RUNTIME_BACKEND}}`
 - OpenPI commit: `{{OPENPI_COMMIT}}`
 - OpenPI environment: `{{OPENPI_ENVIRONMENT}}`
+- LIBERO resource root: `{{LIBERO_ROOT}}`
 - Trajectory protocol: `{{TRAJECTORY_PROTOCOL}}`
 - Initial-state provider: `{{STATE_PROVIDER}}`
 - Initial-state count: `{{STATE_COUNT}}`
@@ -40,6 +41,11 @@ These values are the experiment identity. Do not silently change them. If a
 rollout must be rerun, use the same checkpoint, initial-state manifest, seed,
 control space, frequency, horizon, action chunk, inference steps, GPU mapping,
 and output contract.
+
+Use `backend.libero_root` from the resolved experiment contract for LIBERO
+resources. Do not create a run-local `libero_config/config.yaml`, and do not
+require `LIBERO_CONFIG_PATH`; the workflow applies this resource root directly
+in the simulator process.
 
 ## Stage 1 — execute and freeze the VLA rollout
 

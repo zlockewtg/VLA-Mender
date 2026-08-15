@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from run.pre_repair.generate_prompt import main as generate_prompt
@@ -56,17 +55,12 @@ def test_settings_only_generation_uses_yaml_directory_as_run_root(tmp_path):
     generate_prompt(["--settings", str(settings)])
 
     prompt_path = tmp_path / "prompt.generated.md"
-    manifest_path = tmp_path / "prompt.generated.manifest.json"
     prompt = prompt_path.read_text(encoding="utf-8")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert f"--settings {settings.resolve()}" in prompt
     assert f"--output {tmp_path.resolve()}" in prompt
     assert "{{" not in prompt
     assert "<resolved-settings.yaml>" not in prompt
-    assert manifest["settings"] == str(settings.resolve())
-    assert manifest["run_root"] == str(tmp_path.resolve())
-    assert manifest["prompt"] == str(prompt_path.resolve())
-    assert manifest["prompt_sha256"]
+    assert not (tmp_path / "prompt.generated.manifest.json").exists()
 
 
 def test_pipeline_prompt_renders_run_root_not_diagnosis_directory(tmp_path):

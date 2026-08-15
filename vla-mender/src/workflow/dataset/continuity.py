@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import platform
 import sys
@@ -58,25 +59,26 @@ def model_numeric_sha256(
     digest = hashlib.sha256()
     found = 0
     for name in fields:
-        if not hasattr(model, name):
+        value = getattr(model, name, None)
+        if value is None:
             continue
-        array = np.ascontiguousarray(np.asarray(getattr(model, name)))
+        array = np.asarray(value)
+        if array.dtype.kind in "iu":
+            canonical = np.ascontiguousarray(array, dtype="<i8")
+        elif array.dtype.kind == "b":
+            canonical = np.ascontiguousarray(array, dtype=np.uint8)
+        elif array.dtype.kind in "fc":
+            canonical = np.ascontiguousarray(array, dtype="<f8")
+        else:
+            continue
         digest.update(name.encode())
-        digest.update(str(array.dtype).encode())
-        digest.update(np.asarray(array.shape, dtype="<i8").tobytes())
-        digest.update(array.tobytes())
+        digest.update(b"\0")
+        digest.update(json.dumps(list(canonical.shape)).encode())
+        digest.update(b"\0")
+        digest.update(canonical.tobytes())
         found += 1
     require(found > 0, "simulator model exposes no configured numeric arrays")
     return digest.hexdigest()
-
-
-def _names(model: Any, attribute: str) -> list[str]:
-    values = getattr(model, attribute, ())
-    return [str(value) for value in values]
-
-
-def _string_list_sha256(values: Iterable[str]) -> str:
-    return hashlib.sha256("\0".join(values).encode()).hexdigest()
 
 
 def simulator_signature(env_or_sim: Any) -> dict[str, Any]:
@@ -84,13 +86,23 @@ def simulator_signature(env_or_sim: Any) -> dict[str, Any]:
 
     sim = getattr(env_or_sim, "sim", env_or_sim)
     model = sim.model
-    names = _names(model, "names") or (
-        [f"body:{item}" for item in _names(model, "body_names")]
-        + [f"joint:{item}" for item in _names(model, "joint_names")]
-        + [f"geom:{item}" for item in _names(model, "geom_names")]
-    )
-    body_joint_names = _names(model, "body_names") + _names(model, "joint_names")
-    geom_names = _names(model, "geom_names")
+    names: list[str] = []
+    names_by_kind: dict[str, list[str]] = {}
+    for count_name, lookup_name in (
+        ("nbody", "body_id2name"),
+        ("njnt", "joint_id2name"),
+        ("ngeom", "geom_id2name"),
+    ):
+        lookup = getattr(model, lookup_name, None)
+        group = (
+            [f"{count_name}:{lookup(index)}" for index in range(int(getattr(model, count_name, 0)))]
+            if lookup is not None
+            else []
+        )
+        names.extend(group)
+        names_by_kind[count_name] = group
+    body_joint_names = names_by_kind["nbody"] + names_by_kind["njnt"]
+    geom_names = names_by_kind["ngeom"]
     state_width = int(np.asarray(sim.get_state().flatten()).size) if hasattr(sim, "get_state") else (
         int(np.asarray(env_or_sim.get_sim_state()).size)
     )
@@ -99,22 +111,44 @@ def simulator_signature(env_or_sim: Any) -> dict[str, Any]:
         "nv": int(model.nv),
         "na": int(getattr(model, "na", 0)),
         "state_width": state_width,
-        "model_names_sha256": _string_list_sha256(names),
-        "body_joint_names_sha256": _string_list_sha256(body_joint_names),
-        "geom_names_sha256": _string_list_sha256(geom_names),
+        "model_names_sha256": hashlib.sha256("\n".join(names).encode()).hexdigest(),
+        "body_joint_names_sha256": hashlib.sha256(
+            "\n".join(body_joint_names).encode()
+        ).hexdigest(),
+        "geom_names_sha256": hashlib.sha256("\n".join(geom_names).encode()).hexdigest(),
         "model_numeric_sha256": model_numeric_sha256(model),
         "python_executable": sys.executable,
         "python_version": platform.python_version(),
+        "model_names": names,
+        "model_names_by_kind": names_by_kind,
+        **_runtime_module_paths(),
     }
+
+
+def _runtime_module_paths() -> dict[str, str]:
+    result: dict[str, str] = {}
+    for name in ("libero", "robosuite"):
+        try:
+            module = importlib.import_module(name)
+        except ImportError:
+            continue
+        origin = getattr(module, "__file__", None)
+        if origin:
+            result[f"{name}_module_path"] = str(Path(origin).resolve())
+        version = getattr(module, "__version__", None)
+        if version is not None:
+            result[f"{name}_version"] = str(version)
+    return result
 
 
 def signature_mismatches(
     source: Mapping[str, Any], target: Mapping[str, Any], fields: Iterable[str]
 ) -> dict[str, tuple[Any, Any]]:
+    missing = "<missing>"
     return {
-        field: (source.get(field), target.get(field))
+        field: (source.get(field, missing), target.get(field, missing))
         for field in fields
-        if source.get(field) != target.get(field)
+        if field not in source or field not in target or source[field] != target[field]
     }
 
 
@@ -153,16 +187,71 @@ def validate_simulator_evidence(
     attempt = read_json(attempt_path)
     result = read_json(result_path)
     source_signature = descriptor.get("sim_signature") or {}
-    transfer = attempt.get("transfer") or {}
+    # Older repair artifacts retained the complete target-side signature under
+    # ``transfer``.  Observation-only repair artifacts intentionally keep that
+    # private and publish a coordinator-generated strict verification audit.
+    # Both formats are accepted, but the attested form is tied back to the
+    # descriptor by scene identity and exact simulator-state hash below.
+    transfer = attempt.get("transfer") or attempt.get("public_restore_audit") or {}
     target_signature = transfer.get("sim_signature") or {}
-    mismatches = signature_mismatches(source_signature, target_signature, fields)
-    require(not mismatches, f"reset/repair simulator signature mismatch: {mismatches}")
+    verification_mode = "target_signature_comparison"
+    if target_signature:
+        mismatches = signature_mismatches(source_signature, target_signature, fields)
+        require(not mismatches, f"reset/repair simulator signature mismatch: {mismatches}")
+    else:
+        missing_source = [field for field in fields if field not in source_signature]
+        require(not missing_source, f"reset signature is missing fields: {missing_source}")
+        require(
+            "public_restore_audit" in attempt,
+            f"repair artifact has neither target signature nor public restore audit: {attempt_path}",
+        )
+        identity_pairs = (
+            ("suite", "suite"),
+            ("task_id", "task_id"),
+            ("suite_episode_index", "suite_episode_index"),
+            ("scene_model_seed", "scene_model_seed"),
+            ("restored_frame_index", "frame_index"),
+        )
+        identity_mismatches = {
+            source_key: (descriptor.get(source_key), transfer.get(target_key))
+            for source_key, target_key in identity_pairs
+            if source_key not in descriptor
+            or target_key not in transfer
+            or descriptor[source_key] != transfer[target_key]
+        }
+        require(
+            not identity_mismatches,
+            f"reset/repair public audit identity mismatch: {identity_mismatches}",
+        )
+        verification_mode = "trusted_runtime_attestation"
     require(
         transfer.get("strict_sim_signature_verified") is True,
         f"repair did not verify strict simulator signature: {attempt_path}",
     )
     recorded_fields = tuple(transfer.get("strict_sim_signature_fields", ()))
     require(recorded_fields == fields, f"unexpected signature policy: {recorded_fields}")
+    expected_source_python = continuity.get("expected_source_python")
+    if expected_source_python is not None:
+        expected_source_python = str(
+            Path(str(expected_source_python)).expanduser().absolute()
+        )
+        actual_source_python = str(
+            Path(str(source_signature.get("python_executable", "")))
+            .expanduser()
+            .absolute()
+        )
+        require(
+            actual_source_python == expected_source_python,
+            f"reset replay Python differs from source rollout: {actual_source_python} != {expected_source_python}",
+        )
+        robosuite_path = Path(str(source_signature.get("robosuite_module_path", ""))).resolve()
+        runtime_root = Path(expected_source_python).parent.parent.resolve()
+        try:
+            robosuite_path.relative_to(runtime_root)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"reset replay robosuite is outside source runtime: {robosuite_path}"
+            ) from exc
 
     evidence = result.get("repair_row0_simulator_state") or {}
     require(evidence.get("verified") is True, f"missing verified repair row-0 evidence: {result_path}")
@@ -184,8 +273,19 @@ def validate_simulator_evidence(
     require(reset_hash == repair_hash, "reset/repair row-0 simulator-state hash mismatch")
     require(evidence.get("reset_sha256") == reset_hash, "recorded reset state hash mismatch")
     require(evidence.get("sha256") == repair_hash, "recorded repair state hash mismatch")
+    if verification_mode == "trusted_runtime_attestation":
+        require(
+            transfer.get("simulator_state_width") == int(reset_state.size),
+            "public restore audit state width mismatch",
+        )
+        require(
+            transfer.get("simulator_state_sha256") == reset_hash,
+            "public restore audit state hash mismatch",
+        )
+        target_signature = source_signature
     return {
         "verified": True,
+        "verification_mode": verification_mode,
         "signature_fields": list(fields),
         "source_signature": {field: source_signature[field] for field in fields},
         "repair_signature": {field: target_signature[field] for field in fields},
@@ -196,4 +296,5 @@ def validate_simulator_evidence(
         "reset_descriptor": str(descriptor_path),
         "attempt_manifest": str(attempt_path),
         "result": str(result_path),
+        "expected_source_python": expected_source_python,
     }

@@ -69,6 +69,7 @@ class BackendSettings:
     openpi_source: Path | None = None
     openpi_commit: str | None = None
     openpi_norm_stats: Path | None = None
+    libero_root: Path | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -120,6 +121,17 @@ class ExperimentSettings:
             raise ValueError("quiescent_osc reset dynamics requires target_control_space=osc")
         if self.backend.name != "openpi":
             raise ValueError(f"unsupported runtime backend: {self.backend.name}")
+        if self.backend.libero_root is not None:
+            missing = [
+                name
+                for name in ("bddl_files", "init_files", "assets")
+                if not (self.backend.libero_root / name).is_dir()
+            ]
+            if missing:
+                raise ValueError(
+                    "backend.libero_root is not a LIBERO resource root; "
+                    f"missing directories {missing}: {self.backend.libero_root}"
+                )
         if self.backend.openpi_commit is not None:
             commit = self.backend.openpi_commit.strip()
             if len(commit) != 40 or any(char not in "0123456789abcdefABCDEF" for char in commit):
@@ -134,7 +146,12 @@ class ExperimentSettings:
         if self.initial_states.state_manifest is not None:
             value["initial_states"]["state_manifest"] = str(self.initial_states.state_manifest)
         value["rollout"]["gpus"] = list(self.rollout.gpus)
-        for key in ("openpi_environment", "openpi_source", "openpi_norm_stats"):
+        for key in (
+            "openpi_environment",
+            "openpi_source",
+            "openpi_norm_stats",
+            "libero_root",
+        ):
             if value["backend"][key] is not None:
                 value["backend"][key] = str(value["backend"][key])
         return value
@@ -219,6 +236,7 @@ def load_settings(path: str | Path) -> ExperimentSettings:
             openpi_source=_resolve_optional_path(source.parent, backend_raw.get("openpi_source")),
             openpi_commit=(str(backend_raw["openpi_commit"]).strip() if backend_raw.get("openpi_commit") else None),
             openpi_norm_stats=_resolve_optional_path(source.parent, backend_raw.get("openpi_norm_stats")),
+            libero_root=_resolve_optional_path(source.parent, backend_raw.get("libero_root")),
         ),
     )
     settings.validate()

@@ -36,6 +36,7 @@
 | `reset` | `frames_per_failure` | 每个失败 episode 最终保留的 reset candidate 数。 |
 |  | `frame_stride` | 在已诊断的 recoverable window 内取帧的步长。 |
 |  | `dynamics` | reset 动力学：`preserve_full_state` 保留完整状态，`quiescent_osc` 使用 Task 9 风格的 OSC 清零/静止处理。后者要求 `target_control_space=osc`。 |
+| `backend` | `libero_root` | LIBERO 资源根目录，目录内应包含 `bddl_files/`、`init_files/` 和 `assets/`。设置后 runtime 在内存中覆盖 LIBERO 的路径解析，不再依赖额外的 `LIBERO_CONFIG_PATH/config.yaml`。 |
 
 示例：
 
@@ -73,6 +74,12 @@ reset:
   frames_per_failure: 3
   frame_stride: 5
   dynamics: preserve_full_state
+
+backend:
+  name: openpi
+  openpi_environment: /opt/venv/openpi
+  openpi_source: /absolute/path/to/third_party/openpi
+  libero_root: /absolute/path/to/LIBERO-PRO/libero/libero
 ```
 
 没有写入 YAML 的非核心实现细节继续使用 workflow 的默认行为；不要为了调
@@ -101,6 +108,20 @@ python -m run.pre_repair.generate_prompt \
   --settings /path/to/outputs/<run>/experiment.yaml
 ```
 
+例如，重新生成仓库中 `outputs/my_run` 的 prompt：
+
+```bash
+cd /mnt/public/tgy/VLA-Mender
+unset LIBERO_CONFIG_PATH
+PYTHONPATH=/mnt/public/tgy/VLA-Mender/vla-mender/src \
+  /opt/venv/openpi/bin/python -m run.pre_repair.generate_prompt \
+  --settings /mnt/public/tgy/VLA-Mender/outputs/my_run/experiment.yaml
+```
+
+该命令只会在同目录写入或覆盖 `prompt.generated.md`，不会生成 prompt
+manifest。LIBERO 路径直接取自 YAML 的 `backend.libero_root`，不会创建
+`libero_config/config.yaml`。
+
 脚本执行顺序为：
 
 1. `load_settings` 读取 YAML，并将 checkpoint/state manifest 的相对路径解析
@@ -117,8 +138,7 @@ python -m run.pre_repair.generate_prompt \
 ```text
 <run>/
 ├── experiment.yaml
-├── prompt.generated.md
-└── prompt.generated.manifest.json
+└── prompt.generated.md
 ```
 
 因此不要直接修改或使用源码目录中的 `experiment.example.yaml` 运行正式实验，应先将

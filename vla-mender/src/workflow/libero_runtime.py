@@ -7,6 +7,7 @@ diagnosis evidence preparation remain usable on CPU-only machines.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import math
 from pathlib import Path
@@ -22,18 +23,80 @@ STABILIZATION_STEPS = 10
 DUMMY_ACTION = np.asarray([0.0] * 6 + [-1.0], dtype=np.float32)
 
 
-def _libero_imports() -> tuple[Any, Any, Any]:
-    try:
-        from libero import benchmark
-        from libero.envs import OffScreenRenderEnv
-        from libero.utils import get_libero_path
-    except ImportError:
+_LIBERO_PATH_OVERRIDE: dict[str, str] | None = None
+
+
+def _configured_libero_path(key: str) -> str:
+    if _LIBERO_PATH_OVERRIDE is None or key not in _LIBERO_PATH_OVERRIDE:
+        raise KeyError(f"unknown configured LIBERO path: {key}")
+    return _LIBERO_PATH_OVERRIDE[key]
+
+
+def _libero_path_override(libero_root: Path) -> dict[str, str]:
+    root = libero_root.expanduser().resolve()
+    paths = {
+        "benchmark_root": str(root),
+        "bddl_files": str(root / "bddl_files"),
+        "init_states": str(root / "init_files"),
+        "datasets": str(root.parent / "datasets"),
+        "assets": str(root / "assets"),
+    }
+    missing = [
+        key
+        for key in ("benchmark_root", "bddl_files", "init_states", "assets")
+        if not Path(paths[key]).is_dir()
+    ]
+    if missing:
+        raise ValueError(
+            f"invalid LIBERO resource root {root}; missing path keys {missing}"
+        )
+    return paths
+
+
+def libero_imports(
+    libero_root: Path | None = None,
+) -> tuple[Any, Any, Any]:
+    """Import LIBERO and optionally override all resource paths in memory.
+
+    LIBERO normally reads ``${LIBERO_CONFIG_PATH}/config.yaml``. A configured
+    ``backend.libero_root`` replaces that process-global file lookup with a
+    run-contract path resolver before benchmark modules bind ``get_libero_path``.
+    """
+
+    global _LIBERO_PATH_OVERRIDE
+    errors: list[ImportError] = []
+    for package_name in ("libero.libero", "libero"):
         try:
-            from libero.libero import benchmark, get_libero_path
-            from libero.libero.envs import OffScreenRenderEnv
-        except ImportError as exc:  # pragma: no cover - depends on optional runtime
-            raise RuntimeError("LIBERO and robosuite are required for simulator stages") from exc
-    return benchmark, OffScreenRenderEnv, get_libero_path
+            package = importlib.import_module(package_name)
+        except ImportError as exc:
+            if exc.name and not (
+                exc.name == package_name or exc.name.startswith(package_name + ".")
+            ):
+                raise
+            errors.append(exc)
+            continue
+        if libero_root is not None:
+            _LIBERO_PATH_OVERRIDE = _libero_path_override(libero_root)
+            package.get_libero_path = _configured_libero_path
+            try:
+                utils = importlib.import_module(package_name + ".utils")
+            except ImportError:
+                utils = None
+            if utils is not None:
+                utils.get_libero_path = _configured_libero_path
+        try:
+            benchmark = importlib.import_module(package_name + ".benchmark")
+            envs = importlib.import_module(package_name + ".envs")
+        except ImportError as exc:
+            if exc.name and not exc.name.startswith(package_name + "."):
+                raise
+            errors.append(exc)
+            continue
+        return benchmark, envs.OffScreenRenderEnv, package.get_libero_path
+    cause = errors[-1] if errors else None
+    raise RuntimeError(
+        "LIBERO and robosuite are required for simulator stages"
+    ) from cause
 
 
 def controller_name(control_space: ControlSpace) -> str:
@@ -43,12 +106,21 @@ def controller_name(control_space: ControlSpace) -> str:
 class LiberoRuntime:
     """Build environments and perform exact state/controller operations."""
 
-    def __init__(self, suite: str, task_id: int, control_space: ControlSpace, control_frequency_hz: int):
+    def __init__(
+        self,
+        suite: str,
+        task_id: int,
+        control_space: ControlSpace,
+        control_frequency_hz: int,
+        *,
+        libero_root: Path | None = None,
+    ):
         self.suite = suite
         self.task_id = task_id
         self.control_space = control_space
         self.control_frequency_hz = control_frequency_hz
-        benchmark, offscreen_env, get_libero_path = _libero_imports()
+        self.libero_root = libero_root
+        benchmark, offscreen_env, get_libero_path = libero_imports(libero_root)
         suite_obj = benchmark.get_benchmark_dict()[suite]()
         task = suite_obj.get_task(task_id)
         bddl = Path(get_libero_path("bddl_files")) / task.problem_folder / task.bddl_file
@@ -56,7 +128,7 @@ class LiberoRuntime:
         self._bddl = bddl
 
     def task_definition(self) -> tuple[Any, Any]:
-        benchmark, _, _ = _libero_imports()
+        benchmark, _, _ = libero_imports(self.libero_root)
         suite = benchmark.get_benchmark_dict()[self.suite]()
         return suite, suite.get_task(self.task_id)
 

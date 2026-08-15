@@ -67,6 +67,36 @@ def validate_rollout_contract(summary: Mapping[str, Any], settings_fingerprint: 
     indices = [int(item["episode_index"]) for item in episodes]
     if len(indices) != len(set(indices)):
         raise ValueError("rollout summary contains duplicate episode indices")
+    overall = summary.get("overall")
+    if not isinstance(overall, Mapping):
+        raise ValueError("rollout summary must contain overall metrics")
+    count_names = ("episodes", "successes", "failures")
+    if any(
+        not isinstance(overall.get(name), int)
+        or isinstance(overall.get(name), bool)
+        or int(overall[name]) < 0
+        for name in count_names
+    ):
+        raise ValueError(
+            "rollout overall metrics must contain non-negative integer "
+            "episodes/successes/failures counts"
+        )
+    declared_episodes = int(overall["episodes"])
+    declared_successes = int(overall["successes"])
+    declared_failures = int(overall["failures"])
+    actual_successes = sum(bool(item.get("success")) for item in episodes)
+    actual_failures = len(episodes) - actual_successes
+    if declared_episodes != len(episodes):
+        raise ValueError("rollout overall episode count does not match episodes[]")
+    if declared_successes + declared_failures != declared_episodes:
+        raise ValueError("rollout success/failure counts do not sum to episodes")
+    if (declared_successes, declared_failures) != (
+        actual_successes,
+        actual_failures,
+    ):
+        raise ValueError(
+            "rollout success/failure counts do not match episode outcomes"
+        )
 
 
 def diagnosis_evidence_metadata(summary: Mapping[str, Any]) -> dict[str, Any]:

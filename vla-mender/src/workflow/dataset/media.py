@@ -38,11 +38,17 @@ def validate_shape(rgb: np.ndarray, *, width: int, height: int, label: str) -> N
     require(rgb.shape == (height, width, 3), f"{label} has shape {rgb.shape}, expected {(height, width, 3)}")
 
 
-def iter_video_frames(path: Path) -> Iterator[np.ndarray]:
+def iter_video_frames(path: Path, *, expected_fps: int | None = None) -> Iterator[np.ndarray]:
     require(path.is_file(), f"missing video: {path}")
     reader = imageio_ffmpeg.read_frames(str(path), pix_fmt="rgb24")
     try:
         metadata = next(reader)
+        if expected_fps is not None:
+            actual_fps = float(metadata.get("fps", 0.0))
+            require(
+                abs(actual_fps - expected_fps) <= 1e-6,
+                f"video {path} is {actual_fps} fps, expected {expected_fps}",
+            )
         width, height = (int(value) for value in metadata["size"])
         for payload in reader:
             yield np.frombuffer(payload, dtype=np.uint8).reshape(height, width, 3).copy()
@@ -50,9 +56,9 @@ def iter_video_frames(path: Path) -> Iterator[np.ndarray]:
         reader.close()
 
 
-def video_frame(path: Path, index: int) -> np.ndarray:
+def video_frame(path: Path, index: int, *, expected_fps: int | None = None) -> np.ndarray:
     require(index >= 0, "video frame index must be non-negative")
-    for frame_index, frame in enumerate(iter_video_frames(path)):
+    for frame_index, frame in enumerate(iter_video_frames(path, expected_fps=expected_fps)):
         if frame_index == index:
             return frame
     raise RuntimeError(f"video ended before frame {index}: {path}")
@@ -65,10 +71,11 @@ def video_png_frames(
     width: int,
     height: int,
     horizontal_flip: bool,
+    expected_fps: int | None = None,
 ) -> tuple[list[dict[str, Any]], list[np.ndarray]]:
     encoded: list[dict[str, Any]] = []
     decoded: list[np.ndarray] = []
-    for frame_index, rgb in enumerate(iter_video_frames(path)):
+    for frame_index, rgb in enumerate(iter_video_frames(path, expected_fps=expected_fps)):
         if frame_index >= length:
             break
         rgb = transform_image(rgb, horizontal_flip=horizontal_flip)
@@ -92,5 +99,5 @@ def embedded_png_frames(
         rgb = transform_image(decode_embedded_image(item), horizontal_flip=horizontal_flip)
         validate_shape(rgb, width=width, height=height, label=f"embedded image {index}")
         decoded.append(rgb)
-        encoded.append(encode_png(rgb))
+        encoded.append(encode_png(rgb) if horizontal_flip else dict(item))
     return encoded, decoded

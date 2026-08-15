@@ -132,3 +132,5 @@ packages = ["vla-mender/src/workflow", "vla-mender/src/run"]
 
 [project.scripts]
 vla-mender-pre-repair = "workflow.pipeline:main"
+vla-mender-build-dataset = "workflow.dataset.cli:main"
+vla-mender-libero-dataset-manifest = "workflow.dataset.libero_manifest:main"

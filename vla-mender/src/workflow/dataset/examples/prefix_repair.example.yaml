@@ -1,0 +1,67 @@
+# Paths are resolved relative to this YAML file. Absolute paths are also valid.
+output: /absolute/path/to/new-prefix-repair-dataset
+reference_dataset: /absolute/path/to/compatible-lerobot-v2-reference
+episodes_manifest: /absolute/path/to/selected-episodes.json
+dataset_source: my_task_prefix_plus_repair_v1
+
+fps: 20
+action_horizon: 50
+pre_guard_frames: 20
+post_guard_frames: 5
+require_terminal_success: true
+
+columns:
+  state: state
+  action: actions
+  timestamp: timestamp
+  frame_index: frame_index
+  episode_index: episode_index
+  global_index: index
+  task_index: task_index
+
+repair_columns:
+  state: observation.state
+  action: action
+  action_valid: action_is_valid
+  reward: next.reward
+  done: next.done
+
+cameras:
+  image:
+    prefix_column: image
+    repair_flip_horizontal: true
+    width: 256
+    height: 256
+  wrist_image:
+    prefix_column: wrist_image
+    repair_flip_horizontal: true
+    width: 256
+    height: 256
+
+action:
+  state_dim: 8
+  action_dim: 7
+  gripper_index: 6
+  gripper_threshold: 0.0
+  gripper_low: -1.0
+  gripper_high: 1.0
+  maximum_absolute_value: 1.000001
+
+continuity:
+  require_simulator_evidence: true
+  simulator_state_tolerance: 1.0e-12
+  splice_state_tolerance: 0.005
+  signature_fields:
+    - nq
+    - nv
+    - na
+    - state_width
+    - model_names_sha256
+    - body_joint_names_sha256
+    - geom_names_sha256
+    - model_numeric_sha256
+  max_flow_median_px: 0.5
+  max_flow_p90_px: 1.0
+
+# Optional immutable code/config files copied into meta/provenance/files.
+provenance_files: []

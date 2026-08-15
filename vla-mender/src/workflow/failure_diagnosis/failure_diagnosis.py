@@ -57,6 +57,7 @@ def _render_prompt(
         "{{OPENPI_ENVIRONMENT}}": str(
             settings.backend.openpi_environment or Path(sys.prefix).resolve()
         ),
+        "{{LIBERO_ROOT}}": str(settings.backend.libero_root or "(LIBERO default)"),
         "{{TRAJECTORY_PROTOCOL}}": "vla-mender.libero.openpi/v2",
         "{{STATE_PROVIDER}}": settings.initial_states.provider,
         "{{STATE_COUNT}}": str(settings.initial_states.count),
@@ -340,6 +341,7 @@ def _replay_one(
         settings.task.task_id,
         settings.controller.source_control_space,
         settings.rollout.control_frequency_hz,
+        libero_root=settings.backend.libero_root,
     )
     scene_seed = int(episode["scene_model_seed"])
     env = source.new_env(scene_seed)
@@ -389,6 +391,7 @@ def _replay_one(
         settings.task.task_id,
         settings.controller.target_control_space,
         settings.rollout.control_frequency_hz,
+        libero_root=settings.backend.libero_root,
     )
     target_env = target.new_env(scene_seed)
     try:

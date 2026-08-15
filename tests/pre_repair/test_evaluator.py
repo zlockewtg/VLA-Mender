@@ -158,6 +158,7 @@ def test_aggregate_accepts_standalone_task_text_and_workflow_task_mapping():
     assert metrics == {
         "episodes": 2,
         "successes": 1,
+        "failures": 1,
         "success_rate": 0.5,
         "successful_initial_state_indices": [0],
         "failed_initial_state_indices": [1],
