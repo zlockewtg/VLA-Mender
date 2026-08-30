@@ -5,7 +5,7 @@ import PIL
 import viser.transforms as vtf
 from scipy.spatial.transform import Rotation as SciRotation
 
-from capx.envs.base import BaseEnv
+from knowledge.api.env_protocol import BaseEnv
 from knowledge.api.base_api import ApiBase
 from knowledge.api.vision.owlvit import init_owlvit
 from knowledge.api.motion.pyroki import init_pyroki

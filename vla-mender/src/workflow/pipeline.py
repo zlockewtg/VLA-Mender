@@ -13,7 +13,8 @@ from .failure_diagnosis import (
     materialize_reset_bank,
     write_task_prompt,
 )
-from .parameters import load_settings, write_resolved_settings
+from .parameters import load_experiment_plan, load_settings, write_resolved_settings
+from .pre_repair_campaign import write_campaign_bundle
 from .rollout import run_rollout
 
 
@@ -21,9 +22,17 @@ def prepare_prompt(settings_path: str | Path, output_dir: str | Path) -> dict[st
     """Render the complete pre-repair prompt from YAML only."""
 
     settings_source = Path(settings_path).expanduser().resolve()
-    settings = load_settings(settings_source)
+    plan = load_experiment_plan(settings_source)
     root = Path(output_dir).resolve()
     root.mkdir(parents=True, exist_ok=True)
+    if plan.is_campaign:
+        return write_campaign_bundle(
+            plan,
+            settings_path=settings_source,
+            campaign_root=root,
+            prompt_path=root / "campaign_prompt.md",
+        )
+    settings = plan.tasks[0].settings
     resolved_path = root / "experiment.resolved.yaml"
     write_resolved_settings(settings, resolved_path)
     prompt_path = write_task_prompt(
@@ -87,7 +96,7 @@ def materialize(
     settings = load_settings(settings_path)
     root = Path(output_dir).resolve()
     return materialize_reset_bank(
-        settings, root / "rollout", diagnosis_path, root / "failure_diagnosis"
+        settings, root / "rollout", diagnosis_path, root / "repair_handoff"
     )
 
 

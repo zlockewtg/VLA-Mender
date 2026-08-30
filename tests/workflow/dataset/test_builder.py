@@ -10,7 +10,7 @@ import pyarrow.parquet as pq
 import pytest
 import yaml
 
-from workflow.dataset.builder import build_dataset
+from workflow.dataset.builder import build_dataset, valid_start_indices
 from workflow.dataset.config import load_config
 from workflow.dataset.continuity import (
     flow_metrics,
@@ -66,7 +66,15 @@ def _synthetic_inputs(tmp_path: Path) -> Path:
     pq.write_table(reference_table, reference_data / "episode_000000.parquet")
     _write_json(
         reference / "meta/info.json",
-        {"chunks_size": 1000, "features": {}, "fps": 20, "total_tasks": 1},
+        {
+            "chunks_size": 1000,
+            "features": {
+                "state": {"dtype": "float32", "shape": [2], "names": ["state"]},
+                "actions": {"dtype": "float32", "shape": [2], "names": ["actions"]},
+            },
+            "fps": 20,
+            "total_tasks": 1,
+        },
     )
     (reference / "meta/tasks.jsonl").write_text(
         json.dumps({"task_index": 3, "task": "synthetic task"}) + "\n"
@@ -171,7 +179,13 @@ def test_end_to_end_embedded_build(tmp_path: Path) -> None:
     assert report["repair_suffix_frame_count"] == 3
     assert report["valid_start_count"] == 1
     assert report["max_splice_state_abs_error"] == 0.0
+    assert report["demo_video_count"] == 1
     assert (config.output / "meta/provenance/build_config.yaml").is_file()
+    demo_manifest = json.loads(
+        (config.output / "meta/visualization/trajectory_demos/manifest.json").read_text()
+    )
+    assert demo_manifest["demo_count"] == 1
+    assert (config.output / "meta/visualization/trajectory_demos/demo_01_episode_000.mp4").is_file()
     output = pq.read_table(config.output / "data/chunk-000/episode_000000.parquet")
     assert output["image"][0].as_py() == source["image"][0].as_py()
 
@@ -212,6 +226,39 @@ def test_repair_only_episode_has_no_splice_or_intervention_guard(tmp_path: Path)
     assert all(row["segment_role"] == "repair_only" for row in trainable["frames"])
 
 
+def test_native_splice_training_allows_action_chunks_to_cross_boundary(
+    tmp_path: Path,
+) -> None:
+    config_path = _synthetic_inputs(tmp_path)
+    value = yaml.safe_load(config_path.read_text())
+    value["pre_guard_frames"] = 0
+    value["post_guard_frames"] = 0
+    value["allow_splice_crossing_action_chunks"] = True
+    config_path.write_text(yaml.safe_dump(value, sort_keys=False))
+
+    config = load_config(config_path)
+    report = build_dataset(config)
+    assert report["valid"] is True
+    assert report["valid_start_count"] == 4
+
+    trainable = json.loads(
+        (config.output / "meta/trainable_index_manifest.json").read_text()
+    )
+    assert [row["trainable"] for row in trainable["frames"]] == [
+        True,
+        True,
+        True,
+        True,
+        True,
+        False,
+    ]
+    assert len({row["continuous_segment_id"] for row in trainable["frames"]}) == 1
+    assert valid_start_indices(trainable["frames"], action_horizon=2) == [0, 1, 2, 3]
+
+    build = json.loads((config.output / "meta/build_manifest.json").read_text())
+    assert build["policies"]["splice_crossing_action_chunks_trainable"] is True
+
+
 def test_config_rejects_unknown_keys(tmp_path: Path) -> None:
     path = _synthetic_inputs(tmp_path)
     value = yaml.safe_load(path.read_text())
@@ -219,6 +266,18 @@ def test_config_rejects_unknown_keys(tmp_path: Path) -> None:
     path.write_text(yaml.safe_dump(value))
     with pytest.raises(ValueError, match="unknown top-level keys"):
         load_config(path)
+
+
+def test_build_rejects_action_width_different_from_reference(tmp_path: Path) -> None:
+    path = _synthetic_inputs(tmp_path)
+    value = yaml.safe_load(path.read_text())
+    value["action"]["action_dim"] = 3
+    path.write_text(yaml.safe_dump(value))
+    with pytest.raises(
+        RuntimeError,
+        match=r"configured actions width 3 differs from reference width 2",
+    ):
+        build_dataset(load_config(path))
 
 
 def test_model_numeric_hash_detects_static_scene_motion() -> None:

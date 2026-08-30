@@ -1,0 +1,61 @@
+schema_version: 2
+
+campaign:
+  name: libero_repair_exp_001
+  output_dir: /mnt/public/tgy/VLA-Mender/outputs/repair_exp_001
+  parallel_tasks: 1
+
+project:
+  root: /mnt/public/tgy/VLA-Mender
+  source_root: vla-mender/src
+  knowledge_root: vla-mender/knowledge
+
+environment:
+  # Use the VLA-Mender runtime, which contains LIBERO plus the local knowledge
+  # API dependencies. The pre-repair OpenPI inference environment is not used
+  # by standalone repair.
+  python: /mnt/public/tgy/VLA-Mender/.venv-libero2/bin/python
+  working_directory: /mnt/public/tgy/VLA-Mender
+  libero_root: /opt/venv/openpi/libero/libero/libero
+  env:
+    MUJOCO_GL: egl
+
+resources:
+  gpus: [0]
+  gpus_per_task: 1
+  workers_per_gpu: 2
+  services:
+    profile: default
+    manage: true
+    keep_alive: true
+    port_base: 14000
+    port_stride: 100
+
+runtime:
+  max_steps: 1000
+  job_timeout_s: 1200
+  infrastructure_retries: 2
+  resume: true
+  backend: libero
+
+artifacts:
+  # auto uses hardlink deduplication when the filesystem supports links across
+  # directories and otherwise preserves independent readable evidence files.
+  evidence_dedupe: auto
+
+repair:
+  budget:
+    soft_task_hours: 4
+  smoke:
+    min_seeds: 3
+    max_seeds: 8
+  # These are soft review triggers, not hard attempt/candidate limits.
+  exploration_review:
+    consecutive_no_gain_candidates: 3
+    per_seed_policy_attempts: 8
+  allow_abandon: true
+
+# A task supplies only the completed pre-repair run root. Repair reads the
+# unified repair_handoff/manifest.json below it; no reset frame is listed here.
+tasks:
+  - run_root: /mnt/public/tgy/VLA-Mender/outputs/my_run

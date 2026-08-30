@@ -23,5 +23,11 @@ third_party/sam3/checkpoints/
 outputs/
 *.log
 
-
 .runtime/
+
+# Local training artifacts
+checkpoints/
+wandb/
+vla-mender/wandb/
+analysis/
+experiment_records/

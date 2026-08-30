@@ -9,8 +9,9 @@ import time
 from typing import Any
 
 import numpy as np
-import requests
 import viser.transforms as vtf
+
+from knowledge.api.utils.serve_utils import ToolServiceError, post_once
 
 # Service Configuration
 SERVICE_URL = "http://127.0.0.1:8115"
@@ -163,18 +164,13 @@ def init_contact_graspnet(device: str = "cuda", checkpoint_path: str | None = No
             # "max_angle_deg": max_angle_deg,
         }
 
+        service_url = _service_url()
         try:
-            # start_time = time.time()
-            service_url = _service_url()
-            resp = requests.post(f"{service_url}/plan", json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            # end_time = time.time()
-            # print(f"Sample grasp inference time: {end_time - start_time} seconds")
-        except requests.RequestException as e:
-            raise RuntimeError(
-                f"Failed to communicate with GraspNet service at {service_url}: {e}"
-            )
+            data = post_once(f"{service_url}/plan", payload)
+        except ToolServiceError as exc:
+            raise ToolServiceError(
+                f"Failed to communicate with GraspNet service at {service_url}: {exc}"
+            ) from exc
 
         grasps = _base64_to_numpy(data["grasps_base64"])
         scores = _base64_to_numpy(data["scores_base64"])
@@ -208,15 +204,13 @@ def init_contact_graspnet_point_clouds() -> Any:
             "max_retries": max_retries,
         }
 
+        service_url = _service_url()
         try:
-            service_url = _service_url()
-            resp = requests.post(f"{service_url}/plan_point_clouds", json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-        except requests.RequestException as e:
-            raise RuntimeError(
-                f"Failed to communicate with GraspNet service at {service_url}: {e}"
-            )
+            data = post_once(f"{service_url}/plan_point_clouds", payload)
+        except ToolServiceError as exc:
+            raise ToolServiceError(
+                f"Failed to communicate with GraspNet service at {service_url}: {exc}"
+            ) from exc
 
         grasps = _base64_to_numpy(data["grasps_base64"])
         scores = _base64_to_numpy(data["scores_base64"])

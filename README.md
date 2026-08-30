@@ -22,7 +22,8 @@ For an existing checkout, the script runs `git submodule sync --recursive` and
 `egl-probe`, installs the local sources editable, and runs the environment
 verification. Use `VLA_MENDER_VENV=/path/to/venv` or `--venv PATH` to select an
 existing environment. Add `--no-server-smoke` when only installation and import
-checks are wanted.
+checks are wanted. The bootstrap also provisions both tool checkpoints at their
+fixed repository-relative paths before running verification.
 
 The equivalent manual commands are:
 
@@ -33,17 +34,25 @@ source .venv-libero/bin/activate
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 export UV_LINK_MODE=copy
 uv sync --active --locked --extra libero
+python scripts/install_tool_checkpoints.py
 python scripts/verify_environment.py --libero
 ```
 
 ## Checkpoints and assets
 
-`uv sync` installs code and Python dependencies; it does not download external
-model weights. Contact-GraspNet's `config.yaml` and `model.pt` are present in
-its submodule at
-`third_party/contact_graspnet_pytorch/checkpoints/contact_graspnet/` (the weights are in its nested `checkpoints/model.pt`). SAM3
-weights must be provisioned separately (for example from the shared Hugging Face
-cache) and exposed as `SAM3_CHECKPOINT_PATH`.
+Tool services always load checkpoints from these repository-relative paths:
+
+```text
+third_party/sam3/checkpoints/sam3.pt
+third_party/contact_graspnet_pytorch/checkpoints/contact_graspnet/checkpoints/model.pt
+```
+
+`scripts/bootstrap_environment.sh` runs `scripts/install_tool_checkpoints.py`
+after `uv sync`. The installer keeps valid files already present at those
+locations, otherwise it copies SAM3 from a local Hugging Face cache or downloads
+`facebook/sam3`, and verifies the Contact-GraspNet checkpoint installed by its
+submodule. Runtime service startup does not search external caches or consume
+checkpoint-path environment variables.
 
 Check all expected assets with:
 
@@ -73,9 +82,11 @@ with:
 python scripts/verify_tools.py --stop-servers
 ```
 
-If SAM3 weights are not in the shared cache, set `SAM3_CHECKPOINT_PATH` before
-`--server-smoke`. Contact-GraspNet can be overridden with
-`CONTACT_GRASPNET_CHECKPOINT_DIR`.
+If either repository-local checkpoint is removed, rerun:
+
+```bash
+python scripts/install_tool_checkpoints.py
+```
 
 ## uv path troubleshooting
 
@@ -109,6 +120,7 @@ vla-mender/src/workflow/
   parameters.py                 # experiment contract and resolved YAML
   pipeline.py                   # rollout -> agent handoff -> reset jobs
   libero_runtime.py             # shared LIBERO/MuJoCo/controller bridge
+  rollout/action_noise.py       # deterministic OSC rollout perturbations
   rollout/state_provider.py     # official/randomized/manifest state core
   rollout/runner.py             # shared state/trial seeds and batch execution
   rollout/evaluator.py          # shared single-episode semantics
@@ -133,6 +145,12 @@ reuse `workflow.rollout.state_provider`, `workflow.rollout.runner`, and
 `workflow.rollout.evaluator`; only their artifact adapters differ. This keeps
 state validation, seeds, stabilization, action dispatch, binary-gripper, and
 native-success semantics aligned.
+
+The next stage—retained repair selection to LeRobot dataset and OpenPI
+post-training—is available under `vla-mender/src/run/dataset`. One strict YAML
+resolves source lineage, builder parameters, trainable action-chunk filtering,
+the pinned OpenPI checkout/environment, and training hyperparameters. See
+[`vla-mender/src/run/dataset/README.md`](vla-mender/src/run/dataset/README.md).
 
 ```bash
 # Render the complete pre-repair prompt from YAML only.

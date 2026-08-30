@@ -115,27 +115,38 @@ For every failed episode, in episode-index order:
 2. Identify the semantic `failure_phase` first, such as approach, alignment,
    grasp/contact acquisition, manipulation, transport, release, recovery, or
    timeout. Use the most specific phase supported by public evidence.
-3. Identify `first_causal_frame_index`: the earliest frame after which the
-   behavior leaves a recoverable path, not merely the frame where failure is
-   most visible.
-4. Define one inclusive recoverable window
+3. Identify `first_causal_frame_index`: the frame where the causal failure
+   result is most clearly observable from public evidence. This is the failure
+   window's endpoint, not the first subtle deviation and not merely the timeout
+   frame.
+4. Identify `recoverable_window_start_frame_index`: the earliest frame where
+   the trajectory begins a sustained, observable deviation from phase-aligned
+   successful references. A small out-of-distribution deviation is expected,
+   but intervention at this exact state must still be able to complete the task
+   directly, without rolling back or replaying an earlier prefix. Compare both
+   camera views, contact/engagement, task phase, and public state/action motion
+   against successful trajectories. Reject a start frame that is already a
+   gross outlier or has already lost the contact path needed for direct
+   completion.
+5. Define one inclusive failure window
    `[recoverable_window_start_frame_index,
-   recoverable_window_stop_frame_index]`. It must contain the causal frame,
-   remain within the trajectory, and stop before the state becomes
-   irrecoverable. Do not default to the whole trajectory.
-5. Require an evidence-derived failure window for each episode. Its index span
+   recoverable_window_stop_frame_index]`, and require
+   `recoverable_window_stop_frame_index == first_causal_frame_index`. The
+   window therefore runs from the earliest directly recoverable deviation to
+   the clearest causal failure result. Do not default to the whole trajectory.
+6. Require an evidence-derived failure window for each episode. Its index span
    must be strictly greater than 10: `window_stop - window_start > 10`
    (equivalently, at least 11 frame intervals). A window such as `[0, 10]`
    is therefore invalid. Do not reuse one fixed start/stop interval across all
    episodes; each episode must have its own window supported by its public
    video, state, and action evidence.
-6. Record short evidence statements that are directly observable in the
+7. Record short evidence statements that are directly observable in the
    videos, state, or executed actions. Lower confidence when evidence is
    ambiguous.
 
 Use zero-based frame indices and require
-`0 <= start <= causal <= stop < num_frames`. A timeout is still diagnosed at
-its earliest causal failure, not only at the final frame.
+`0 <= start < stop == causal < num_frames`. A timeout alone is not a causal
+frame when the failure mechanism becomes clearly observable earlier.
 
 ## Stage 4 — cluster failure modes
 
@@ -178,7 +189,7 @@ Write `failure_diagnosis/diagnosis.json` with this schema:
       "failure_mode_id": "FM-01",
       "failure_category": "alignment",
       "failure_mode": "short root-cause label",
-      "first_causal_frame_index": 86,
+      "first_causal_frame_index": 102,
       "recoverable_window_start_frame_index": 78,
       "recoverable_window_stop_frame_index": 102,
       "evidence": ["short public evidence statement"],
@@ -211,6 +222,12 @@ This stage applies the configured stride/count, replays each selected action
 prefix, verifies public-state agreement, applies `preserve_full_state`, and
 writes reset candidates, replay verification, private reset states, and repair
 jobs. The diagnosis agent does not access or select private reset payloads.
+
+Reset candidates are the earliest stride-aligned frames beginning at
+`recoverable_window_start_frame_index` (for example `start`, `start + stride`,
+...). They intentionally stay near the first directly recoverable deviation;
+the causal/window-stop frame documents the clearest failure result and is not
+the preferred intervention point.
 
 The pre-repair workflow ends with the rollout artifacts, public diagnosis,
 clustered failure modes, validated windows, and optional replay-verified reset

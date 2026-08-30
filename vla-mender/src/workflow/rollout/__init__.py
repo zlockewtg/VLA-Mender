@@ -1,5 +1,6 @@
 """Shared initial-state, evaluation, and pre-repair rollout APIs."""
 
+from .action_noise import OscActionNoise
 from .evaluator import EvaluationConfig, EpisodeEvaluation, evaluate_episode
 from .runner import (
     EpisodeRun,
@@ -17,6 +18,7 @@ __all__ = [
     "EpisodeSpec",
     "EvaluationConfig",
     "InitialStateBundle",
+    "OscActionNoise",
     "build_episode_specs",
     "evaluate_episode",
     "policy_seed",

@@ -123,14 +123,12 @@ try:
 
     try:
         from .franka.libero import FrankaLiberoApi
-        from .franka.libero_privileged import FrankaLiberoPrivilegedApi
         from .franka.libero_reduced import FrankaLiberoApiReduced
         from .franka.libero_osc_reduced_skill_library import (
             FrankaLiberoApiReducedOscSkillLibrary,
         )
         from .franka.libero_reduced_skill_library import FrankaLiberoApiReducedSkillLibrary
 
-        register_api("FrankaLiberoPrivilegedApi", FrankaLiberoPrivilegedApi)
         register_api("FrankaLiberoApi", lambda env: FrankaLiberoApi(env, use_sam3=True))
         register_api("FrankaLiberoApiReduced", FrankaLiberoApiReduced)
         register_api("FrankaLiberoApiReducedSkillLibrary", FrankaLiberoApiReducedSkillLibrary)
@@ -148,14 +146,12 @@ except Exception:
 # robosuite import cannot disable the LIBERO-only runtime.
 try:
     from .franka.libero import FrankaLiberoApi
-    from .franka.libero_privileged import FrankaLiberoPrivilegedApi
     from .franka.libero_reduced import FrankaLiberoApiReduced
     from .franka.libero_osc_reduced_skill_library import (
         FrankaLiberoApiReducedOscSkillLibrary,
     )
     from .franka.libero_reduced_skill_library import FrankaLiberoApiReducedSkillLibrary
 
-    register_api("FrankaLiberoPrivilegedApi", FrankaLiberoPrivilegedApi)
     register_api("FrankaLiberoApi", lambda env: FrankaLiberoApi(env, use_sam3=True))
     register_api("FrankaLiberoApiReduced", FrankaLiberoApiReduced)
     register_api("FrankaLiberoApiReducedSkillLibrary", FrankaLiberoApiReducedSkillLibrary)

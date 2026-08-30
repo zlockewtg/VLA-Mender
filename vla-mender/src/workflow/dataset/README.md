@@ -17,10 +17,13 @@ workflow/dataset/
   manifest.py           task-agnostic episode input contract
   continuity.py         model/state hashes and optical-flow admission
   media.py              embedded PNG and native-video adapters
+  demo_videos.py        deterministic complete-trajectory demo rendering
   builder.py            atomic LeRobot dataset builder
   cli.py                generic build CLI
   libero_manifest.py    adapter for VLA-Mender LIBERO repair batches
   libero_observation_manifest.py  adapter for observation-only repair batches
+  research_manifest.py  adapter for retained standalone-repair evidence
+  run.py                high-level YAML preparation and atomic build orchestration
   visualize_splices.py  annotated full and boundary-clip splice videos
 ```
 
@@ -46,6 +49,15 @@ PYTHONPATH=vla-mender/src python -m workflow.dataset.cli \
   --config path/to/build.yaml
 ```
 
+For the end-to-end standalone-repair path, including retained-manifest
+materialization and a resolved post-training config, use the higher-level run
+entrypoint documented in `run/dataset/README.md`:
+
+```bash
+PYTHONPATH=vla-mender/src python -m run.dataset.build \
+  --settings path/to/dataset.yaml
+```
+
 To inspect all spliced episodes after a build:
 
 ```bash
@@ -58,6 +70,12 @@ and a hashed index under `meta/visualization/splice_videos/`.
 
 The output path must not exist. This prevents a partially changed rerun from
 silently overwriting an immutable training artifact.
+
+Every build renders three complete annotated trajectory demos by default under
+`meta/visualization/trajectory_demos/`. Episodes are selected deterministically
+and evenly over final episode order; datasets with fewer than three episodes
+render all of them. Set `demo_videos.enabled: false` or change
+`demo_videos.count` in the build YAML when needed.
 
 ## YAML contract
 
@@ -73,6 +91,9 @@ Important settings are:
 - `continuity.signature_fields`: compiled simulator properties which must match.
 - `pre_guard_frames`, `post_guard_frames`, and `action_horizon`: training-mask
   policy around the controller transition.
+- `allow_splice_crossing_action_chunks`: defaults to `false`; set it to `true`
+  only for native continuous trajectories whose prefix and repair boundary is
+  intentionally trainable as one action-chunk segment.
 
 Relative paths in YAML resolve relative to the YAML file. Relative paths in the
 episode manifest resolve relative to the manifest.
@@ -189,7 +210,10 @@ continuous segments. Rows in the final prefix guard, initial repair guard, and
 terminal row are non-trainable. A valid action-chunk start must remain entirely
 inside one trainable segment, so chunks cannot cross the splice.
 Repair-only rows form one continuous segment, receive no intervention guard,
-and only mask the terminal row.
+and only mask the terminal row. Prefix-plus-repair rows normally remain two
+continuous segments. With zero guards and
+`allow_splice_crossing_action_chunks: true`, they instead form one native
+episode segment and action chunks may cross the splice.
 
 The full per-row decision is recorded in
 `meta/trainable_index_manifest.json`; consumers should use this artifact rather

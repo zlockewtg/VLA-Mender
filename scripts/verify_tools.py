@@ -28,6 +28,14 @@ RUNTIME_DIR = ROOT / ".runtime" / "tool_servers"
 STATE_FILE = RUNTIME_DIR / "state.json"
 SERVICES = (("sam3", 8114), ("graspnet", 8115), ("pyroki", 8116))
 
+sys.path.insert(0, str(TOOLS))
+from checkpoint_paths import (  # noqa: E402
+    CONTACT_GRASPNET_CHECKPOINT_DIR,
+    CONTACT_GRASPNET_CHECKPOINT_PATH,
+    CONTACT_GRASPNET_CONFIG_PATH,
+    SAM3_CHECKPOINT_PATH,
+)
+
 
 class VerificationError(RuntimeError):
     pass
@@ -132,76 +140,26 @@ def _http_health(host: str, port: int) -> dict:
     return payload
 
 
-def _sam3_checkpoint_exists(path: Path) -> bool:
-    if path.is_file():
-        return path.name == "sam3.pt"
-    if not path.is_dir():
-        return False
-    return (path / "sam3.pt").is_file() or any(
-        (path / "snapshots").glob("*/sam3.pt")
-    )
-
-
 def _resolve_checkpoints() -> tuple[Path, Path]:
-    sam3_candidates: list[Path] = []
-    if os.environ.get("SAM3_CHECKPOINT_PATH"):
-        sam3_candidates.append(Path(os.environ["SAM3_CHECKPOINT_PATH"]).expanduser())
-    if os.environ.get("HF_HOME"):
-        sam3_candidates.append(
-            Path(os.environ["HF_HOME"]).expanduser()
-            / "hub/models--facebook--sam3"
-        )
-    sam3_candidates.extend(
-        [
-            Path("/mnt/public/tgy/ckpts/huggingface/hub/models--facebook--sam3"),
-            Path.home() / ".cache/huggingface/hub/models--facebook--sam3",
-        ]
-    )
-    sam3_path = next(
-        (path.resolve() for path in sam3_candidates if _sam3_checkpoint_exists(path)),
-        None,
-    )
-    if sam3_path is None:
-        checked = ", ".join(map(str, sam3_candidates))
+    if not SAM3_CHECKPOINT_PATH.is_file():
         raise SkipVerification(
-            "SAM3 checkpoint not found; set SAM3_CHECKPOINT_PATH "
-            f"(checked: {checked})"
+            "repository-local SAM3 checkpoint not found; run "
+            f"scripts/install_tool_checkpoints.py: {SAM3_CHECKPOINT_PATH}"
+        )
+    if not CONTACT_GRASPNET_CHECKPOINT_PATH.is_file():
+        raise SkipVerification(
+            "repository-local Contact-GraspNet checkpoint not found; run "
+            f"scripts/install_tool_checkpoints.py: {CONTACT_GRASPNET_CHECKPOINT_PATH}"
+        )
+    if not CONTACT_GRASPNET_CONFIG_PATH.is_file():
+        raise SkipVerification(
+            "repository-local Contact-GraspNet config not found; run "
+            f"scripts/bootstrap_environment.sh: {CONTACT_GRASPNET_CONFIG_PATH}"
         )
 
-    grasp_candidates: list[Path] = []
-    if os.environ.get("CONTACT_GRASPNET_CHECKPOINT_DIR"):
-        grasp_candidates.append(
-            Path(os.environ["CONTACT_GRASPNET_CHECKPOINT_DIR"]).expanduser()
-        )
-    grasp_candidates.extend(
-        [
-            CONTACT_ROOT / "checkpoints/contact_graspnet/checkpoints",
-            ROOT.parent
-            / "capx-aspire/capx/third_party/contact_graspnet_pytorch"
-            / "checkpoints/contact_graspnet/checkpoints",
-        ]
-    )
-    grasp_dir = next(
-        (
-            path.resolve()
-            for path in grasp_candidates
-            if (path / "model.pt").is_file()
-            and (path.parent / "config.yaml").is_file()
-        ),
-        None,
-    )
-    if grasp_dir is None:
-        checked = ", ".join(map(str, grasp_candidates))
-        raise SkipVerification(
-            "Contact-GraspNet checkpoint not found; set "
-            f"CONTACT_GRASPNET_CHECKPOINT_DIR (checked: {checked})"
-        )
-
-    os.environ["SAM3_CHECKPOINT_PATH"] = str(sam3_path)
-    os.environ["CONTACT_GRASPNET_CHECKPOINT_DIR"] = str(grasp_dir)
-    print(f"PASS SAM3 checkpoint ({sam3_path})")
-    print(f"PASS Contact-GraspNet checkpoint ({grasp_dir})")
-    return sam3_path, grasp_dir
+    print(f"PASS SAM3 checkpoint ({SAM3_CHECKPOINT_PATH})")
+    print(f"PASS Contact-GraspNet checkpoint ({CONTACT_GRASPNET_CHECKPOINT_DIR})")
+    return SAM3_CHECKPOINT_PATH, CONTACT_GRASPNET_CHECKPOINT_DIR
 
 
 def _pid_alive(pid: int) -> bool:
@@ -316,8 +274,6 @@ def _server_smoke(timeout: float) -> None:
     active_env = Path(sys.prefix).resolve()
     env["VIRTUAL_ENV"] = str(active_env)
     env["PATH"] = str(active_env / "bin") + os.pathsep + env.get("PATH", "")
-    env["SAM3_CHECKPOINT_PATH"] = str(sam3_path)
-    env["CONTACT_GRASPNET_CHECKPOINT_DIR"] = str(grasp_dir)
     command = [
         uv,
         "run",

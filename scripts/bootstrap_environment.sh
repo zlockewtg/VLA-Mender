@@ -22,8 +22,9 @@ Options:
   --no-server-smoke    install and import-check only; do not start tools
 
 The script initializes Git submodules, installs their editable uv sources,
-verifies imports, and by default starts the three local tool services in the
-background through scripts/verify_tools.py.
+provisions tool checkpoints at repository-relative paths, verifies imports,
+and by default starts the three local tool services in the background through
+scripts/verify_tools.py.
 EOF
       exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
@@ -48,6 +49,7 @@ export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 export UV_LINK_MODE="${UV_LINK_MODE:-copy}"
 uv sync --active --locked --extra "$EXTRA"
+python scripts/install_tool_checkpoints.py
 python scripts/verify_environment.py --libero
 
 if (( START_SERVERS )); then

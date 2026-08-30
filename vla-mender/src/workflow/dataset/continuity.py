@@ -175,10 +175,109 @@ def read_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _validate_handoff_evidence(
+    continuity: Mapping[str, Any], *, tolerance: float
+) -> dict[str, Any]:
+    """Validate the current pre-repair handoff and repair-runtime attestation."""
+
+    handoff_path = Path(str(continuity["handoff_manifest"])).resolve()
+    result_path = Path(str(continuity["result"])).resolve()
+    handoff = read_json(handoff_path)
+    result = read_json(result_path)
+    require(
+        handoff.get("artifact_type") == "vla_mender.repair_handoff"
+        and handoff.get("complete") is True,
+        f"repair handoff is not complete: {handoff_path}",
+    )
+    summary = handoff.get("summary") or {}
+    require(
+        summary.get("all_replays_verified") is True,
+        f"repair handoff has unverified replays: {handoff_path}",
+    )
+    source_job_id = str(
+        continuity.get("source_job_id") or result.get("source_job_id") or ""
+    )
+    require(bool(source_job_id), f"repair result has no source job identity: {result_path}")
+    require(
+        str(result.get("source_job_id")) == source_job_id,
+        f"repair result source job mismatch: {result_path}",
+    )
+    matches = [
+        row
+        for row in handoff.get("resets", [])
+        if str(row.get("job_id")) == source_job_id
+    ]
+    require(len(matches) == 1, f"handoff does not contain one reset for {source_job_id}")
+    reset = matches[0]
+    require(reset.get("verified") is True, f"handoff reset is not verified: {source_job_id}")
+    require(
+        result.get("success") is True and result.get("task_completed") is True,
+        f"repair result is not a successful task completion: {result_path}",
+    )
+    restore_error = float(result.get("restore_state_max_abs_error", float("inf")))
+    require(
+        restore_error <= tolerance,
+        f"repair reset-state restore error {restore_error} exceeds {tolerance}",
+    )
+
+    reset_path = (handoff_path.parent / str(reset["reset_state"])).resolve()
+    require(reset_path.is_file(), f"missing handoff reset state: {reset_path}")
+    require(
+        _sha256_file(reset_path) == str(reset.get("reset_state_file_sha256")),
+        f"handoff reset-state file hash mismatch: {reset_path}",
+    )
+    with np.load(reset_path, allow_pickle=False) as payload:
+        require("sim_state" in payload.files, f"handoff reset lacks sim_state: {reset_path}")
+        reset_state = np.asarray(payload["sim_state"], dtype=np.float64).reshape(-1)
+    state_hash = simulator_state_sha256(reset_state)
+    require(
+        state_hash == str(reset.get("private_state_sha256")),
+        f"handoff private simulator-state hash mismatch: {reset_path}",
+    )
+
+    evidence_hashes = result.get("evidence_sha256") or {}
+    require(isinstance(evidence_hashes, Mapping), f"invalid evidence hashes: {result_path}")
+    required_evidence = {"trajectory.json", "wide.mp4", "wrist.mp4"}
+    require(
+        required_evidence <= set(evidence_hashes),
+        f"repair result lacks required evidence hashes: {result_path}",
+    )
+    for name, expected in evidence_hashes.items():
+        evidence_path = result_path.parent / str(name)
+        require(evidence_path.is_file(), f"missing repair evidence: {evidence_path}")
+        require(
+            _sha256_file(evidence_path) == str(expected),
+            f"repair evidence hash mismatch: {evidence_path}",
+        )
+    return {
+        "verified": True,
+        "verification_mode": "pre_repair_handoff_runtime_restore",
+        "source_job_id": source_job_id,
+        "state_width": int(reset_state.size),
+        "state_sha256": state_hash,
+        "max_abs_error": restore_error,
+        "tolerance": tolerance,
+        "handoff_manifest": str(handoff_path),
+        "result": str(result_path),
+        "evidence_sha256": dict(evidence_hashes),
+    }
+
+
 def validate_simulator_evidence(
     continuity: Mapping[str, Any], *, fields: tuple[str, ...], tolerance: float
 ) -> dict[str, Any]:
     """Verify reset descriptor, repair runtime signature, and exact repair row 0."""
+
+    if continuity.get("handoff_manifest"):
+        return _validate_handoff_evidence(continuity, tolerance=tolerance)
 
     descriptor_path = Path(str(continuity["reset_descriptor"])).resolve()
     attempt_path = Path(str(continuity["attempt_manifest"])).resolve()

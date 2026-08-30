@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from capx.envs.base import BaseEnv
+from knowledge.api.env_protocol import BaseEnv
 
 
 class ApiBase(ABC):

@@ -4,6 +4,7 @@ import asyncio
 import functools
 import json
 import logging
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, List
@@ -317,7 +318,18 @@ def _do_solve_ik(target_pose_wxyz_xyz: np.ndarray, prev_cfg: np.ndarray | None) 
             target_wxyz=target_pose_wxyz_xyz[:-3],
         )
     else:
-        q = pks.solve_ik_vel_cost(
+        # ``tools/pyroki_snippets`` intentionally contains only the small
+        # upstream subset, while the continuity-aware solver lives in the
+        # VLA-Mender knowledge package. Import it explicitly instead of
+        # assuming the script-local package exports it.
+        package_root = str(Path(__file__).resolve().parents[1])
+        if package_root not in sys.path:
+            sys.path.insert(0, package_root)
+        from knowledge.api.motion.pyroki_snippets._solve_ik_vel_cost import (
+            solve_ik as solve_ik_vel_cost,
+        )
+
+        q = solve_ik_vel_cost(
             robot=_ROBOT,
             target_link_name=_TARGET_LINK,
             target_position=target_pose_wxyz_xyz[-3:],

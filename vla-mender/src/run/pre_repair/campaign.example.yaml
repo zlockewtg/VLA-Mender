@@ -1,0 +1,48 @@
+# Copy this file into a campaign run directory. Tasks execute in list order.
+# The `task` mapping supplies shared defaults; each `tasks` entry may override
+# task fields or any runtime section such as `initial_states` or `rollout`.
+task:
+  checkpoint: /absolute/path/to/openpi/checkpoint
+  policy_config: pi0_libero
+  task_description: null
+
+tasks:
+  - key: object-0
+    suite: libero_object
+    task_id: 0
+  - key: spatial-9
+    suite: libero_spatial
+    task_id: 9
+  - key: goal-0
+    suite: libero_goal
+    task_id: 0
+
+initial_states:
+  provider: randomized_bddl  # official | randomized_bddl | state_manifest
+  count: 50
+  seed_start: 100000
+  state_manifest: null
+rollout:
+  control_frequency_hz: 20
+  max_steps: 300
+  policy_seed: 7
+  gpus: [0, 1, 2, 3]
+  workers_per_gpu: 1
+  action_chunk: 5
+  inference_steps: 5
+  num_steps_wait: 10
+  binary_gripper: false
+  gripper_hysteresis_threshold: 0.2
+controller:
+  source_control_space: osc
+  target_control_space: osc
+reset:
+  candidate_selection: pre_window_and_endpoints
+  prevention_steps: 10
+  dynamics: preserve_full_state
+backend:
+  name: openpi
+  openpi_environment: /absolute/path/to/VLA-Mender/.venv-openpi
+  openpi_source: ../../../../third_party/openpi
+  openpi_commit: 15a9616a00943ada6c20a0f158e3adb39df2ccac
+  libero_root: /absolute/path/to/LIBERO-PRO/libero/libero

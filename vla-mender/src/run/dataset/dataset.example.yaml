@@ -1,0 +1,91 @@
+schema_version: 1
+
+run:
+  output_dir: /absolute/path/to/outputs/my_dataset_run
+
+source:
+  adapter: research_quality_selection
+  pre_repair_run: /absolute/path/to/completed_pre_repair_run
+  repair_run: /absolute/path/to/completed_repair_run
+  selection_manifest: /absolute/path/to/retained_manifest.json
+  # Dataset-local task indices need only be unique inside this output dataset.
+  task_index: 0
+
+build:
+  output: /absolute/path/to/new_lerobot_dataset
+  reference_dataset: /absolute/path/to/schema_compatible_lerobot_dataset
+  dataset_source: my_repair_dataset_v1
+  fps: 20
+  action_horizon: 50
+  pre_guard_frames: 20
+  post_guard_frames: 5
+  require_terminal_success: true
+  cameras:
+    image:
+      prefix_column: image
+      repair_flip_horizontal: false
+      width: 256
+      height: 256
+    wrist_image:
+      prefix_column: wrist_image
+      repair_flip_horizontal: false
+      width: 256
+      height: 256
+  action:
+    state_dim: 8
+    action_dim: 7
+    gripper_index: 6
+    gripper_threshold: 0.0
+    gripper_low: -1.0
+    gripper_high: 1.0
+    maximum_absolute_value: 1.000001
+  # Enabled by default. Demos are complete, annotated, multi-camera trajectories.
+  demo_videos:
+    enabled: true
+    count: 3
+  continuity:
+    require_simulator_evidence: true
+    simulator_state_tolerance: 1.0e-12
+    splice_state_tolerance: 0.005
+    max_flow_median_px: 0.5
+    max_flow_p90_px: 1.0
+
+# Optional. `build --prepare-only` resolves this into training.resolved.yaml;
+# launch it later with `python -m run.dataset.train --settings ...`.
+training:
+  openpi_source: /absolute/path/to/VLA-Mender/third_party/openpi
+  openpi_environment: /absolute/path/to/VLA-Mender/.venv-openpi
+  openpi_commit: 15a9616a00943ada6c20a0f158e3adb39df2ccac
+  base_config: pi0_libero
+  run_name: my_repair_posttrain
+  experiment_name: my_repair_posttrain_v1
+  checkpoint_base_dir: /absolute/path/to/checkpoints
+  initialization_checkpoint: /absolute/path/to/pytorch/checkpoint
+  normalization_asset_id: physical-intelligence/libero
+  gpus: [0, 1, 2, 3]
+  action_horizon: 50
+  batch_size: 32
+  num_workers: 2
+  num_train_steps: 4000
+  save_interval: 500
+  keep_period: 500
+  seed: 42
+  extra_delta_transform: true
+  # Optional physical-threshold raw OSC action-timestep loss mask.
+  mask_zero_arm_action_loss: false
+  zero_arm_action_dims: 6
+  zero_arm_position_threshold_m: 0.002
+  zero_arm_orientation_threshold_rad: 0.02
+  zero_arm_position_action_scale_m: 0.05
+  zero_arm_orientation_action_scale_rad: 0.5
+  zero_arm_gripper_change_eps: 1.0e-4
+  zero_arm_gripper_state_change_threshold: 5.0e-5
+  zero_arm_keep_chunk_start: true
+  learning_rate:
+    warmup_steps: 200
+    peak_lr: 2.0e-5
+    decay_steps: 4000
+    decay_lr: 1.0e-6
+  resume: false
+  overwrite: false
+  wandb_enabled: true

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class CartesianPoseConvergenceError(RuntimeError):
     """Raised when a motion finishes outside the requested EE pose tolerance."""
 
-from capx.envs.base import (
+from knowledge.api.env_protocol import (
     BaseEnv,
 )
 from knowledge.api.base_api import ApiBase

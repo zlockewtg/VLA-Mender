@@ -1,7 +1,14 @@
-# VLA-Mender Runtime-Safety Skill Workflow
+# VLA-Mender Skill Catalog Workflow
 
-These skills are mandatory safety guidance for reset-suffix manipulation. They document pinned
-runtime APIs; they are not code snippets to copy or reimplement.
+This catalog contains both runtime repair guidance and offline data-workflow guidance. Before a
+repair experiment, inspect the manifest, search the catalog directly, and read every `SKILL.md`
+plausibly relevant to the exact task, action needs, and failure mode. List the relevant files and
+ideas in the prompt-required transient Markdown checklist. The checklist is not persisted or used
+as a runtime gate. Skills document pinned contracts; they are not callables or snippets to copy
+without adaptation.
+
+The following rules apply to every reset-suffix manipulation skill selected with
+`scope: repair_runtime`:
 
 1. Decode observations only with `get_robot_state(obs)`.
 2. Ground the task-language object and call `estimate_grasp_state(obs, object_prompts)` before phase
@@ -20,3 +27,6 @@ runtime APIs; they are not code snippets to copy or reimplement.
 
 Runtime API docstrings and `aspire/agent_workspace/api-reference.md` are authoritative. Skills may
 choose task-language prompts and observation-relative poses, but may not change safety semantics.
+
+Skills with `scope: dataset_pipeline` are selected only for offline dataset construction or
+validation. They are not part of an online repair policy's callable API.

@@ -1,67 +1,50 @@
-# NVIDIA Task-Gallery Strategy Reference Workflow
+# VLA-Mender example catalog workflow
 
-Use this workflow when an ASPIRE actor receives one or more `retrieved_strategy` files from the
-public NVIDIA Task Gallery snapshot.
+`knowledge/examples` is an index over two independent reference catalogs:
 
-## 1. Treat gallery programs as references, not executable truth
+- `aspire/`: the public NVIDIA ASPIRE Task Gallery snapshot. It is static,
+  pre-task public evidence and is refreshed only by its upstream sync script.
+- `repair/`: local, evaluator-backed repair winners. These references may be
+  outcome-derived and therefore keep their campaign, protocol, coverage, and
+  limitation metadata.
 
-The gallery files are successful upstream programs for their published task and runtime. They are
-read-only few-shot strategy references. They are not admitted skills, do not add runtime APIs, and
-must never override the current task language, API reference, policy, or observation.
+Both catalogs contain reference programs, not executable truth. The current
+task language, pinned API, public observations, Agent Constitution, and repair
+state machine always take precedence.
 
-Before using a reference:
+## Agent-owned selection order
 
-1. Read the current runtime task language and pinned API contract.
-2. Inspect the current initial image or causal failure evidence.
-3. Read only the highest-ranked reference that answers a concrete planning question.
-4. Optionally compare the next ranked reference when it offers a materially different observable
-   strategy. Do not load the whole gallery.
+1. Require an exact suite/task/language and compatible failure-mode entry gate
+   before treating a local `repair` example as task-specific prior evidence.
+2. Retrieve `aspire` examples by task meaning. Prefer an exact public task match
+   when one exists; otherwise borrow only observation-relative control ideas.
+3. A local repair match and a public ASPIRE match may both be inspected. Keep
+   their evidence domains distinct while reasoning about applicability.
+4. Do not merge success rates across seen repair resets, debug subsets,
+   randomized rollouts, and official rollouts.
 
-## 2. Retrieve by task meaning
+## Repair-campaign use
 
-Automatic retrieval ranks references within the current benchmark domain using the runtime task
-language and task name. Exact or near-exact task matches are preferred. A run can also pin reference
-IDs with `strategy_references.include_ids` in its YAML config.
+Search the catalogs directly with filesystem tools. Start from this workflow,
+the root `manifest.json`, `aspire/manifest.json`, and `repair/manifest.json`,
+then read every program and evidence card that is plausibly related to the task,
+failure phase, mechanism, perception, or control need. There is no fixed top-k.
 
-Use references to answer questions such as:
+Before repair code or rollouts, list the relevant files/symbols in the
+prompt-required transient Markdown checklist, including why each item may help
+and what must be adapted. If neither catalog contains a match, list the searched
+scope and `none found`. The runtime does not ingest, freeze, hash, or validate
+this checklist, and examples do not create candidate provenance fields.
 
-- which semantic roles and actionable parts need localization;
-- whether a task should be decomposed into drawer/contact, grasp, transport, and placement stages;
-- which stages should re-observe and verify visible progress;
-- which observation-relative geometry or retry structure transferred between similar tasks.
-
-## 3. Adapt before writing code
-
-Never copy a gallery program verbatim without reviewing every call and constant.
-
-- Replace unavailable or stale calls with functions documented by the current reduced API.
-- Recompute object, handle, destination, and waypoint geometry from the current observation.
-- Remove task IDs, seeds, benchmark paths, simulator state, hidden predicates, and filesystem or
-  network access from generated robot code.
-- Replace scene-specific world-coordinate filters with semantic masks and observable relational
-  checks whenever possible.
-- Call `commit_target_mask` for every final task-relevant instance selected through SAM3.
-- Preserve only control structure supported by current evidence; do not inherit unrelated fallback
-  branches merely because they appear in a successful upstream program.
-
-The current API reference and Agent Constitution always win when a gallery script conflicts with
-them.
-
-## 4. Use references without leaking evaluation evidence
-
-Task Gallery programs are public, static pre-task references. They may be selected before baseline
-generation and during debug repair, but selection/final rollout outcomes must never influence which
-reference is chosen. Record the selected reference IDs and hashes in the actor artifacts so the run
-is auditable.
+Use a selected source only as a possible starting point. Static examples cannot
+replace the verified `parent_ref` required for a non-initial candidate and never
+count as repaired-seed coverage.
 
 ## Catalog maintenance
 
-Refresh and verify the checked-in Task Gallery snapshot with:
-
-```bash
-python aspire-strategies/sync_from_nvidia.py
-python aspire-strategies/sync_from_nvidia.py --check
-```
-
-`manifest.json` records every available successful program, its upstream URL, task metadata,
-extracted call names, byte count, and SHA-256 digest.
+- Refresh/check only the public snapshot with `aspire/sync_from_nvidia.py`.
+- Add local winners only through `repair/manifest.json`, with immutable program
+  SHA-256, exact task identity, source artifact, evaluation protocol, coverage,
+  and caveat fields.
+- `manifest.json` at this directory is only the catalog index. Do not flatten
+  ASPIRE and local repair entries into one provenance domain.

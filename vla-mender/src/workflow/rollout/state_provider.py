@@ -18,6 +18,12 @@ from ..libero_runtime import LiberoRuntime, libero_imports
 from ..parameters import ExperimentSettings
 
 
+SUPPORTED_STATE_MANIFEST_KINDS = {
+    "custom_bddl_sampler_initial_states",
+    "robot_randomized_initial_states",
+}
+
+
 @dataclasses.dataclass(frozen=True)
 class InitialStateBundle:
     """Validated simulator states and the provenance needed by evaluation."""
@@ -39,6 +45,50 @@ class RandomizedStateBundle:
     validation: dict[str, Any]
 
 
+@dataclasses.dataclass(frozen=True)
+class RobotInitialStateRandomization:
+    """Deterministic, bounded OSC motion baked into an initial state.
+
+    Scene placement and robot pose intentionally use different seeds.  The
+    bounds are offsets from the reset EEF position, in metres.
+    """
+
+    seed_start: int = 2_000_000
+    ee_offset_low: tuple[float, float, float] = (-0.04, -0.04, -0.02)
+    ee_offset_high: tuple[float, float, float] = (0.04, 0.04, 0.04)
+    minimum_offset_norm: float = 0.015
+    position_tolerance: float = 0.003
+    maximum_final_position_error: float = 0.005
+    maximum_motion_steps: int = 60
+    required_stable_steps: int = 3
+    settle_steps: int = 10
+    maximum_restore_ee_observation_error: float = 0.0001
+    maximum_restore_ee_drift: float = 0.005
+
+    def validate(self) -> None:
+        low = np.asarray(self.ee_offset_low, dtype=np.float64)
+        high = np.asarray(self.ee_offset_high, dtype=np.float64)
+        if low.shape != (3,) or high.shape != (3,) or np.any(low >= high):
+            raise ValueError("robot EEF offset bounds must be three ordered intervals")
+        if self.minimum_offset_norm <= 0:
+            raise ValueError("minimum robot EEF offset norm must be positive")
+        if self.minimum_offset_norm > float(np.linalg.norm(np.maximum(abs(low), abs(high)))):
+            raise ValueError("minimum robot EEF offset norm cannot be reached by the bounds")
+        if (
+            self.position_tolerance <= 0
+            or self.maximum_final_position_error < self.position_tolerance
+            or self.maximum_restore_ee_observation_error <= 0
+            or self.maximum_restore_ee_drift <= 0
+        ):
+            raise ValueError("robot EEF tolerances must be positive")
+        if (
+            self.maximum_motion_steps <= 0
+            or self.required_stable_steps <= 0
+            or self.settle_steps < 0
+        ):
+            raise ValueError("robot motion steps must be positive and settle steps non-negative")
+
+
 def array_hash(value: np.ndarray) -> str:
     return hashlib.sha256(np.ascontiguousarray(value).view(np.uint8)).hexdigest()
 
@@ -52,7 +102,7 @@ def load_custom_initial_states(
     manifest = json.loads(path.read_text(encoding="utf-8"))
     if (
         int(manifest.get("schema_version", 0)) != 1
-        or manifest.get("kind") != "custom_bddl_sampler_initial_states"
+        or manifest.get("kind") not in SUPPORTED_STATE_MANIFEST_KINDS
         or not isinstance(manifest.get("suite"), str)
         or not manifest["suite"]
         or int(manifest.get("task_id", -1)) < 0
@@ -90,11 +140,13 @@ def load_custom_initial_states(
             raise ValueError(f"custom state-vector index mismatch at {index}: {path}")
         if entry.get("simulator_state_sha256") != array_hash(state):
             raise ValueError(f"custom state hash mismatch at index {index}: {path}")
-        for key in ("scene_model_seed", "placement_seed"):
+        if manifest["kind"] == "custom_bddl_sampler_initial_states":
+            required_integer_fields = ("scene_model_seed", "placement_seed")
+        else:
+            required_integer_fields = ("official_initial_state_index", "robot_seed")
+        for key in required_integer_fields:
             if not isinstance(entry.get(key), int):
-                raise ValueError(
-                    f"custom manifest entry {index} has invalid {key}: {path}"
-                )
+                raise ValueError(f"custom manifest entry {index} has invalid {key}: {path}")
         if (
             entry.get("suite") != manifest["suite"]
             or int(entry.get("task_id", -1)) != int(manifest["task_id"])
@@ -158,7 +210,7 @@ def resolve_evaluation_initial_states(
     return InitialStateBundle(
         states=states,
         entries=entries,
-        kind="custom_bddl_sampler",
+        kind=str(manifest["kind"]),
         array_sha256=state_array_hash,
         manifest=manifest,
         manifest_path=path,
@@ -175,7 +227,7 @@ def _load_workflow_state_manifest(
     count: int,
 ) -> tuple[np.ndarray, list[dict[str, Any]]]:
     document = json.loads(path.read_text(encoding="utf-8"))
-    if document.get("kind") == "custom_bddl_sampler_initial_states":
+    if document.get("kind") in SUPPORTED_STATE_MANIFEST_KINDS:
         manifest, states, entries, _ = load_custom_initial_states(path)
         if manifest["suite"] != suite or int(manifest["task_id"]) != task_id:
             raise ValueError(
@@ -376,6 +428,123 @@ def _hold(env: Any, obs: dict[str, Any], steps: int) -> tuple[dict[str, Any], bo
     return obs, bool(done)
 
 
+def _current_observation(env: Any) -> dict[str, Any]:
+    """Read observations after a state restore without advancing simulation."""
+
+    if hasattr(env, "regenerate_obs_from_state"):
+        state = np.asarray(env.get_sim_state(), dtype=np.float64)
+        return env.regenerate_obs_from_state(state)
+    return env.env._get_observations()
+
+
+def _sample_ee_offset(
+    robot_seed: int, spec: RobotInitialStateRandomization
+) -> np.ndarray:
+    rng = np.random.default_rng(robot_seed)
+    low = np.asarray(spec.ee_offset_low, dtype=np.float64)
+    high = np.asarray(spec.ee_offset_high, dtype=np.float64)
+    for _ in range(10_000):
+        offset = rng.uniform(low, high)
+        if float(np.linalg.norm(offset)) >= spec.minimum_offset_norm:
+            return offset
+    raise RuntimeError("failed to sample a robot EEF offset satisfying the norm bound")
+
+
+def _move_ee_to_randomized_initial_pose(
+    *,
+    env: Any,
+    obs: dict[str, Any],
+    robot_seed: int,
+    spec: RobotInitialStateRandomization,
+) -> tuple[dict[str, Any], bool, dict[str, Any]]:
+    """Move the EEF with actual OSC commands and return auditable provenance."""
+
+    if "robot0_eef_pos" not in obs or "robot0_joint_pos" not in obs:
+        raise RejectedSceneError("OSC robot observations are unavailable")
+    start_ee = np.asarray(obs["robot0_eef_pos"], dtype=np.float64).copy()
+    start_joints = np.asarray(obs["robot0_joint_pos"], dtype=np.float64).copy()
+    requested_offset = _sample_ee_offset(robot_seed, spec)
+    target_ee = start_ee + requested_offset
+    low, high = env.env.action_spec
+    low = np.asarray(low, dtype=np.float64)
+    high = np.asarray(high, dtype=np.float64)
+    if low.shape != (7,) or high.shape != (7,):
+        raise RejectedSceneError(
+            f"robot initial-state randomization requires 7-D OSC actions, got {low.shape}"
+        )
+
+    done = False
+    motion_steps = 0
+    stable_steps = 0
+    previous_ee = start_ee.copy()
+    command_hasher = hashlib.sha256()
+    for motion_steps in range(1, spec.maximum_motion_steps + 1):
+        current = np.asarray(obs["robot0_eef_pos"], dtype=np.float64)
+        error = target_ee - current
+        position_error = float(np.linalg.norm(error))
+        motion_since_previous = float(np.linalg.norm(current - previous_ee))
+        if position_error <= spec.position_tolerance and motion_since_previous <= 0.0005:
+            stable_steps += 1
+        else:
+            stable_steps = 0
+        if stable_steps >= spec.required_stable_steps:
+            motion_steps -= 1
+            break
+        previous_ee = current.copy()
+        action = np.zeros(7, dtype=np.float32)
+        # Robosuite OSC_POSE maps a unit translation command to 5 cm.
+        if position_error > spec.position_tolerance:
+            action[:3] = np.clip(error / 0.05, low[:3], high[:3])
+        action[-1] = np.clip(-1.0, low[-1], high[-1])
+        command_hasher.update(np.ascontiguousarray(action).view(np.uint8))
+        obs, _, done, _ = env.step(action.tolist())
+        if done or bool(env.env._check_success()):
+            break
+    else:
+        motion_steps = spec.maximum_motion_steps
+
+    reached_ee = np.asarray(obs["robot0_eef_pos"], dtype=np.float64).copy()
+    reached_error = float(np.linalg.norm(target_ee - reached_ee))
+    if done or bool(env.env._check_success()):
+        raise RejectedSceneError("task terminated or succeeded during robot initialization")
+    if reached_error > spec.position_tolerance:
+        raise RejectedSceneError(
+            "robot EEF target was not reached: "
+            f"error={reached_error}, tolerance={spec.position_tolerance}"
+        )
+
+    obs, settle_done = _hold(env, obs, spec.settle_steps)
+    final_ee = np.asarray(obs["robot0_eef_pos"], dtype=np.float64).copy()
+    final_joints = np.asarray(obs["robot0_joint_pos"], dtype=np.float64).copy()
+    final_error = float(np.linalg.norm(target_ee - final_ee))
+    if settle_done or bool(env.env._check_success()):
+        raise RejectedSceneError("task terminated or succeeded while robot state settled")
+    if final_error > spec.maximum_final_position_error:
+        raise RejectedSceneError(
+            "robot EEF drifted outside target tolerance while settling: "
+            f"error={final_error}, tolerance={spec.maximum_final_position_error}"
+        )
+    return (
+        obs,
+        False,
+        {
+            "robot_seed": int(robot_seed),
+            "robot_initial_eef_xyz": start_ee.tolist(),
+            "robot_requested_eef_offset_xyz": requested_offset.tolist(),
+            "robot_target_eef_xyz": target_ee.tolist(),
+            "robot_achieved_eef_xyz": final_ee.tolist(),
+            "robot_achieved_eef_offset_xyz": (final_ee - start_ee).tolist(),
+            "robot_target_error_m": final_error,
+            "robot_initial_joint_positions": start_joints.tolist(),
+            "robot_achieved_joint_positions": final_joints.tolist(),
+            "robot_osc_motion_steps": int(motion_steps),
+            "robot_required_stable_steps": int(spec.required_stable_steps),
+            "robot_osc_settle_steps": int(spec.settle_steps),
+            "robot_osc_command_sha256": command_hasher.hexdigest(),
+        },
+    )
+
+
 def existing_randomized_cache(
     output: Path, expected: dict[str, Any]
 ) -> dict[str, Any] | None:
@@ -402,6 +571,8 @@ def existing_randomized_cache(
         "all_sampler_replays_exact",
         "all_explicit_restores_exact",
     )
+    if expected.get("robot_initial_state_randomization") == "actual_osc_command":
+        required_audits += ("all_robot_initial_states_use_actual_osc_commands",)
     entries = manifest.get("entries")
     entries_valid = isinstance(entries, list) and len(entries) == int(expected["count"])
     if entries_valid:
@@ -424,6 +595,20 @@ def existing_randomized_cache(
         != expected["allowed_maximum_stabilization_drift"]
         or float(validation.get("maximum_stabilization_drift", math.inf))
         > float(expected["allowed_maximum_stabilization_drift"])
+        or (
+            expected.get("robot_initial_state_randomization") == "actual_osc_command"
+            and (
+                int(validation.get("unique_robot_seeds", -1)) != int(expected["count"])
+                or int(validation.get("unique_robot_achieved_eef_xyz", -1))
+                != int(expected["count"])
+                or float(validation.get("maximum_restore_ee_drift_m", math.inf))
+                > float(expected["allowed_maximum_restore_ee_drift_m"])
+                or float(
+                    validation.get("maximum_restore_ee_observation_error_m", math.inf)
+                )
+                > float(expected["allowed_maximum_restore_ee_observation_error_m"])
+            )
+        )
         or states.ndim != 2
         or len(states) != int(expected["count"])
         or list(states.shape) != manifest.get("state_shape")
@@ -438,11 +623,14 @@ def _sample_scene(
     *,
     env: Any,
     placement_seed: int,
+    robot_seed: int,
+    robot_randomization: RobotInitialStateRandomization,
     expected_shape: tuple[int, ...],
     wait_steps: int,
     validation_hold_steps: int,
     maximum_stabilization_drift: float,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+    robot_randomization.validate()
     env.seed(placement_seed)
     try:
         obs = env.reset()
@@ -451,18 +639,32 @@ def _sample_scene(
     initial_success = bool(env.env._check_success())
     raw_objects, _ = _poses(env)
     obs, stabilization_done = _hold(env, obs, wait_steps)
-    state = np.asarray(env.get_sim_state(), dtype=np.float64).copy()
-    objects, fixtures = _poses(env)
-    settling_drift = _max_object_drift(raw_objects, objects)
+    stabilized_objects, _ = _poses(env)
+    settling_drift = _max_object_drift(raw_objects, stabilized_objects)
     stabilized_success = bool(env.env._check_success())
-    if state.shape != expected_shape or not np.isfinite(state).all():
-        raise RejectedSceneError(f"invalid state shape/value: {state.shape}")
     if initial_success or stabilization_done or stabilized_success:
         raise RejectedSceneError("task predicate is true during initialization")
+    obs, _, robot_audit = _move_ee_to_randomized_initial_pose(
+        env=env,
+        obs=obs,
+        robot_seed=robot_seed,
+        spec=robot_randomization,
+    )
+    state = np.asarray(env.get_sim_state(), dtype=np.float64).copy()
+    objects, fixtures = _poses(env)
+    robot_motion_object_drift = _max_object_drift(stabilized_objects, objects)
+    if state.shape != expected_shape or not np.isfinite(state).all():
+        raise RejectedSceneError(f"invalid state shape/value: {state.shape}")
 
     env.seed(placement_seed)
     replay_obs = env.reset()
     replay_obs, replay_done = _hold(env, replay_obs, wait_steps)
+    replay_obs, _, replay_robot_audit = _move_ee_to_randomized_initial_pose(
+        env=env,
+        obs=replay_obs,
+        robot_seed=robot_seed,
+        spec=robot_randomization,
+    )
     replay_state = np.asarray(env.get_sim_state(), dtype=np.float64).copy()
     replay_objects, replay_fixtures = _poses(env)
     state_error = float(np.max(np.abs(replay_state - state)))
@@ -470,31 +672,55 @@ def _sample_scene(
         objects, fixtures
     )
     pose_error = float(np.max(np.abs(pose_delta))) if pose_delta.size else 0.0
-    if replay_done or state_error > 1e-12 or pose_error > 1e-12:
+    replay_robot_error = float(
+        np.max(
+            np.abs(
+                np.asarray(replay_robot_audit["robot_achieved_eef_xyz"])
+                - np.asarray(robot_audit["robot_achieved_eef_xyz"])
+            )
+        )
+    )
+    if (
+        replay_done
+        or state_error > 1e-12
+        or pose_error > 1e-12
+        or replay_robot_error > 1e-12
+    ):
         raise RejectedSceneError(
             f"sampler replay mismatch: done={replay_done}, "
-            f"state={state_error}, pose={pose_error}"
+            f"state={state_error}, pose={pose_error}, robot={replay_robot_error}"
         )
 
     env.seed(placement_seed)
     env.reset()
-    restored_obs = env.set_init_state(state)
+    LiberoRuntime.set_sim_state(env, state)
+    restored_obs = _current_observation(env)
     restore_error = float(
         np.max(np.abs(np.asarray(env.get_sim_state(), dtype=np.float64) - state))
     )
+    restored_ee = np.asarray(restored_obs["robot0_eef_pos"], dtype=np.float64).copy()
+    saved_ee = np.asarray(robot_audit["robot_achieved_eef_xyz"], dtype=np.float64)
+    restore_ee_error = float(np.linalg.norm(restored_ee - saved_ee))
     restored_objects, _ = _poses(env)
     restored_obs, validation_done = _hold(env, restored_obs, validation_hold_steps)
     validation_objects, _ = _poses(env)
     validation_drift = _max_object_drift(restored_objects, validation_objects)
+    validation_ee = np.asarray(restored_obs["robot0_eef_pos"], dtype=np.float64)
+    validation_ee_drift = float(np.linalg.norm(validation_ee - restored_ee))
     if (
         restore_error > 1e-12
+        or restore_ee_error
+        > robot_randomization.maximum_restore_ee_observation_error
         or validation_done
         or bool(env.env._check_success())
         or validation_drift > maximum_stabilization_drift
+        or validation_ee_drift > robot_randomization.maximum_restore_ee_drift
     ):
         raise RejectedSceneError(
             "restore/hold validation failed: "
-            f"restore={restore_error}, done={validation_done}, drift={validation_drift}"
+            f"restore={restore_error}, restore_ee={restore_ee_error}, "
+            f"done={validation_done}, object_drift={validation_drift}, "
+            f"ee_drift={validation_ee_drift}"
         )
     return (
         state,
@@ -504,11 +730,308 @@ def _sample_scene(
             "post_stabilization_predicate_success": stabilized_success,
             "sampler_replay_state_max_abs_error": state_error,
             "sampler_replay_pose_max_abs_error": pose_error,
+            "sampler_replay_robot_eef_max_abs_error": replay_robot_error,
             "explicit_restore_state_max_abs_error": restore_error,
+            "explicit_restore_robot_eef_error_m": restore_ee_error,
             "object_position_drift_during_initial_settling": settling_drift,
+            "maximum_object_position_drift_during_robot_motion": robot_motion_object_drift,
             "maximum_object_position_drift_during_validation_hold": validation_drift,
+            "robot_eef_drift_during_validation_hold_m": validation_ee_drift,
+            **robot_audit,
         },
     )
+
+
+def _sample_official_robot_state(
+    *,
+    env: Any,
+    official_state: np.ndarray,
+    official_index: int,
+    scene_model_seed: int,
+    robot_seed: int,
+    robot_randomization: RobotInitialStateRandomization,
+    wait_steps: int,
+    validation_hold_steps: int,
+    maximum_stabilization_drift: float,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Bake a real OSC EEF perturbation into one official LIBERO state."""
+
+    def initialize() -> tuple[np.ndarray, dict[str, np.ndarray], dict[str, Any]]:
+        env.seed(scene_model_seed)
+        env.reset()
+        LiberoRuntime.set_sim_state(env, official_state)
+        base_restore_error = float(
+            np.max(
+                np.abs(
+                    np.asarray(env.get_sim_state(), dtype=np.float64)
+                    - np.asarray(official_state, dtype=np.float64)
+                )
+            )
+        )
+        obs = _current_observation(env)
+        initial_success = bool(env.env._check_success())
+        raw_objects, _ = _poses(env)
+        obs, stabilization_done = _hold(env, obs, wait_steps)
+        stabilized_objects, _ = _poses(env)
+        stabilized_success = bool(env.env._check_success())
+        if initial_success or stabilization_done or stabilized_success:
+            raise RejectedSceneError("official task predicate is true during initialization")
+        obs, _, robot_audit = _move_ee_to_randomized_initial_pose(
+            env=env,
+            obs=obs,
+            robot_seed=robot_seed,
+            spec=robot_randomization,
+        )
+        state = np.asarray(env.get_sim_state(), dtype=np.float64).copy()
+        final_objects, _ = _poses(env)
+        audit = {
+            "official_source_restore_state_max_abs_error": base_restore_error,
+            "initial_predicate_success": initial_success,
+            "post_stabilization_predicate_success": stabilized_success,
+            "object_position_drift_during_initial_settling": _max_object_drift(
+                raw_objects, stabilized_objects
+            ),
+            "maximum_object_position_drift_during_robot_motion": _max_object_drift(
+                stabilized_objects, final_objects
+            ),
+            **robot_audit,
+        }
+        return state, final_objects, audit
+
+    state, objects, robot_audit = initialize()
+    if state.shape != official_state.shape or not np.isfinite(state).all():
+        raise RejectedSceneError(f"invalid official robot state: {state.shape}")
+    replay_state, replay_objects, replay_audit = initialize()
+    state_error = float(np.max(np.abs(replay_state - state)))
+    object_error_values = _signature(replay_objects, {}) - _signature(objects, {})
+    object_error = (
+        float(np.max(np.abs(object_error_values))) if object_error_values.size else 0.0
+    )
+    replay_robot_error = float(
+        np.max(
+            np.abs(
+                np.asarray(replay_audit["robot_achieved_eef_xyz"])
+                - np.asarray(robot_audit["robot_achieved_eef_xyz"])
+            )
+        )
+    )
+    if state_error > 1e-12 or object_error > 1e-12 or replay_robot_error > 1e-12:
+        raise RejectedSceneError(
+            "official robot-state replay mismatch: "
+            f"state={state_error}, object={object_error}, robot={replay_robot_error}"
+        )
+
+    env.seed(scene_model_seed)
+    env.reset()
+    LiberoRuntime.set_sim_state(env, state)
+    restored_obs = _current_observation(env)
+    restore_error = float(
+        np.max(np.abs(np.asarray(env.get_sim_state(), dtype=np.float64) - state))
+    )
+    saved_ee = np.asarray(robot_audit["robot_achieved_eef_xyz"], dtype=np.float64)
+    restored_ee = np.asarray(restored_obs["robot0_eef_pos"], dtype=np.float64)
+    restore_ee_error = float(np.linalg.norm(restored_ee - saved_ee))
+    restored_objects, _ = _poses(env)
+    restored_obs, validation_done = _hold(env, restored_obs, validation_hold_steps)
+    validation_objects, _ = _poses(env)
+    validation_object_drift = _max_object_drift(restored_objects, validation_objects)
+    validation_ee = np.asarray(restored_obs["robot0_eef_pos"], dtype=np.float64)
+    validation_ee_drift = float(np.linalg.norm(validation_ee - restored_ee))
+    if (
+        restore_error > 1e-12
+        or restore_ee_error > robot_randomization.maximum_restore_ee_observation_error
+        or validation_done
+        or bool(env.env._check_success())
+        or validation_object_drift > maximum_stabilization_drift
+        or validation_ee_drift > robot_randomization.maximum_restore_ee_drift
+    ):
+        raise RejectedSceneError(
+            "official restore/hold validation failed: "
+            f"restore={restore_error}, restore_ee={restore_ee_error}, "
+            f"done={validation_done}, object_drift={validation_object_drift}, "
+            f"ee_drift={validation_ee_drift}"
+        )
+    return state, {
+        **robot_audit,
+        "official_initial_state_index": int(official_index),
+        "official_source_state_sha256": array_hash(official_state),
+        "sampler_replay_state_max_abs_error": state_error,
+        "sampler_replay_pose_max_abs_error": object_error,
+        "sampler_replay_robot_eef_max_abs_error": replay_robot_error,
+        "explicit_restore_state_max_abs_error": restore_error,
+        "explicit_restore_robot_eef_error_m": restore_ee_error,
+        "maximum_object_position_drift_during_validation_hold": validation_object_drift,
+        "robot_eef_drift_during_validation_hold_m": validation_ee_drift,
+    }
+
+
+def generate_official_robot_states(
+    *,
+    output: Path,
+    suite_name: str,
+    task_id: int,
+    count: int,
+    control_freq: int,
+    wait_steps: int,
+    validation_hold_steps: int,
+    maximum_stabilization_drift: float,
+    scene_model_seed: int = 7,
+    libero_root: Path | None = None,
+    robot_randomization: RobotInitialStateRandomization | None = None,
+) -> dict[str, Any]:
+    """Materialize official scenes with independently randomized robot poses."""
+
+    robot_randomization = robot_randomization or RobotInitialStateRandomization()
+    robot_randomization.validate()
+    expected_contract = {
+        "schema_version": 1,
+        "kind": "robot_randomized_initial_states",
+        "scene_source": "official",
+        "suite": suite_name,
+        "task_id": task_id,
+        "count": count,
+        "control_frequency": control_freq,
+        "scene_model_seed": scene_model_seed,
+        "official_state_index_start": 0,
+        "non_training_stabilization_steps_baked_into_state": wait_steps,
+        "validation_hold_steps": validation_hold_steps,
+        "allowed_maximum_stabilization_drift": maximum_stabilization_drift,
+        "robot_initial_state_randomization": "actual_osc_command",
+        "robot_seed_start": robot_randomization.seed_start,
+        "robot_ee_offset_low_m": list(robot_randomization.ee_offset_low),
+        "robot_ee_offset_high_m": list(robot_randomization.ee_offset_high),
+        "robot_minimum_ee_offset_norm_m": robot_randomization.minimum_offset_norm,
+        "robot_position_tolerance_m": robot_randomization.position_tolerance,
+        "robot_maximum_final_position_error_m": (
+            robot_randomization.maximum_final_position_error
+        ),
+        "robot_maximum_motion_steps": robot_randomization.maximum_motion_steps,
+        "robot_required_stable_steps": robot_randomization.required_stable_steps,
+        "robot_settle_steps_baked_into_state": robot_randomization.settle_steps,
+        "allowed_maximum_restore_ee_observation_error_m": (
+            robot_randomization.maximum_restore_ee_observation_error
+        ),
+        "allowed_maximum_restore_ee_drift_m": robot_randomization.maximum_restore_ee_drift,
+    }
+    if output.exists():
+        manifest, states, entries, _ = load_custom_initial_states(output / "manifest.json")
+        mismatches = {
+            key: {"cached": manifest.get(key), "requested": value}
+            for key, value in expected_contract.items()
+            if manifest.get(key) != value
+        }
+        if mismatches:
+            raise FileExistsError(f"official robot-state cache contract mismatch: {mismatches}")
+        if len(states) != count or len(entries) != count:
+            raise ValueError(f"official robot-state cache has an invalid count: {output}")
+        return manifest
+
+    benchmark, get_libero_path, env_class = _generator_imports(libero_root)
+    benchmark_dict = benchmark.get_benchmark_dict()
+    if suite_name not in benchmark_dict:
+        raise ValueError(f"unknown LIBERO suite: {suite_name}")
+    suite = benchmark_dict[suite_name]()
+    task = suite.get_task(task_id)
+    official = np.asarray(suite.get_task_init_states(task_id), dtype=np.float64)
+    if official.ndim != 2 or len(official) < count:
+        raise ValueError(f"official LIBERO has {len(official)} states; requested {count}")
+    bddl = Path(get_libero_path("bddl_files")) / task.problem_folder / task.bddl_file
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=f".{output.name}.", dir=output.parent))
+    env = env_class(
+        bddl_file_name=str(bddl),
+        camera_heights=64,
+        camera_widths=64,
+        control_freq=control_freq,
+        controller="OSC_POSE",
+    )
+    try:
+        states: list[np.ndarray] = []
+        entries: list[dict[str, Any]] = []
+        for index in range(count):
+            robot_seed = robot_randomization.seed_start + index
+            state, audit = _sample_official_robot_state(
+                env=env,
+                official_state=official[index],
+                official_index=index,
+                scene_model_seed=scene_model_seed,
+                robot_seed=robot_seed,
+                robot_randomization=robot_randomization,
+                wait_steps=wait_steps,
+                validation_hold_steps=validation_hold_steps,
+                maximum_stabilization_drift=maximum_stabilization_drift,
+            )
+            states.append(state)
+            entries.append(
+                {
+                    "custom_initial_state_index": index,
+                    "state_vector_index": index,
+                    "scene_source": "official",
+                    "scene_model_seed": scene_model_seed,
+                    "suite": suite_name,
+                    "task_id": task_id,
+                    "task": str(task.language),
+                    "state_dimension": int(state.size),
+                    "simulator_state_sha256": array_hash(state),
+                    **audit,
+                }
+            )
+            print(
+                f"Accepted official robot state {index + 1}/{count}: "
+                f"official_index={index}, robot_seed={robot_seed}",
+                flush=True,
+            )
+        state_array = np.stack(states)
+        np.save(temporary / "states.npy", state_array)
+        manifest = {
+            **expected_contract,
+            "generated_at": datetime.now(UTC).isoformat(),
+            "task_name": str(task.name),
+            "task": str(task.language),
+            "official": True,
+            "state_file": "states.npy",
+            "state_shape": list(state_array.shape),
+            "entries": entries,
+        }
+        validation = {
+            "schema_version": 1,
+            "valid": True,
+            "count": count,
+            "unique_state_hashes": len({item["simulator_state_sha256"] for item in entries}),
+            "unique_robot_seeds": len({item["robot_seed"] for item in entries}),
+            "unique_robot_achieved_eef_xyz": len(
+                {tuple(item["robot_achieved_eef_xyz"]) for item in entries}
+            ),
+            "all_initial_predicates_false": True,
+            "all_sampler_replays_exact": True,
+            "all_explicit_restores_exact": True,
+            "all_robot_initial_states_use_actual_osc_commands": True,
+            "maximum_stabilization_drift": max(
+                item["maximum_object_position_drift_during_validation_hold"]
+                for item in entries
+            ),
+            "allowed_maximum_stabilization_drift": maximum_stabilization_drift,
+            "maximum_restore_ee_observation_error_m": max(
+                item["explicit_restore_robot_eef_error_m"] for item in entries
+            ),
+            "allowed_maximum_restore_ee_observation_error_m": (
+                robot_randomization.maximum_restore_ee_observation_error
+            ),
+            "maximum_restore_ee_drift_m": max(
+                item["robot_eef_drift_during_validation_hold_m"] for item in entries
+            ),
+            "allowed_maximum_restore_ee_drift_m": robot_randomization.maximum_restore_ee_drift,
+            "state_array_sha256": array_hash(state_array),
+        }
+        LiberoRuntime.write_json(temporary / "manifest.json", manifest)
+        LiberoRuntime.write_json(temporary / "validation_report.json", validation)
+        temporary.replace(output)
+        return manifest
+    except BaseException:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    finally:
+        env.close()
 
 
 def generate_randomized_states(
@@ -524,8 +1047,12 @@ def generate_randomized_states(
     maximum_stabilization_drift: float,
     max_attempts: int,
     libero_root: Path | None = None,
+    robot_randomization: RobotInitialStateRandomization | None = None,
 ) -> dict[str, Any]:
-    """Build or reuse a validated deterministic randomized-state cache."""
+    """Build a deterministic cache varying both BDDL scene and robot pose."""
+
+    robot_randomization = robot_randomization or RobotInitialStateRandomization()
+    robot_randomization.validate()
 
     expected_contract = {
         "schema_version": 1,
@@ -538,6 +1065,22 @@ def generate_randomized_states(
         "non_training_stabilization_steps_baked_into_state": wait_steps,
         "validation_hold_steps": validation_hold_steps,
         "allowed_maximum_stabilization_drift": maximum_stabilization_drift,
+        "robot_initial_state_randomization": "actual_osc_command",
+        "robot_seed_start": robot_randomization.seed_start,
+        "robot_ee_offset_low_m": list(robot_randomization.ee_offset_low),
+        "robot_ee_offset_high_m": list(robot_randomization.ee_offset_high),
+        "robot_minimum_ee_offset_norm_m": robot_randomization.minimum_offset_norm,
+        "robot_position_tolerance_m": robot_randomization.position_tolerance,
+        "robot_maximum_final_position_error_m": (
+            robot_randomization.maximum_final_position_error
+        ),
+        "robot_maximum_motion_steps": robot_randomization.maximum_motion_steps,
+        "robot_required_stable_steps": robot_randomization.required_stable_steps,
+        "robot_settle_steps_baked_into_state": robot_randomization.settle_steps,
+        "allowed_maximum_restore_ee_observation_error_m": (
+            robot_randomization.maximum_restore_ee_observation_error
+        ),
+        "allowed_maximum_restore_ee_drift_m": robot_randomization.maximum_restore_ee_drift,
     }
     cached = existing_randomized_cache(output, expected_contract)
     if cached is not None:
@@ -584,10 +1127,13 @@ def generate_randomized_states(
             if len(states) == count:
                 break
             placement_seed = seed_start + offset
+            robot_seed = robot_randomization.seed_start + offset
             try:
                 state, signature, audit = _sample_scene(
                     env=env,
                     placement_seed=placement_seed,
+                    robot_seed=robot_seed,
+                    robot_randomization=robot_randomization,
                     expected_shape=expected_shape,
                     wait_steps=wait_steps,
                     validation_hold_steps=validation_hold_steps,
@@ -633,7 +1179,8 @@ def generate_randomized_states(
                 }
             )
             print(
-                f"Accepted randomized scene {index + 1}/{count}: seed={placement_seed}",
+                f"Accepted randomized scene {index + 1}/{count}: "
+                f"placement_seed={placement_seed}, robot_seed={robot_seed}",
                 flush=True,
             )
         if len(states) != count:
@@ -677,11 +1224,30 @@ def generate_randomized_states(
             "all_initial_predicates_false": True,
             "all_sampler_replays_exact": True,
             "all_explicit_restores_exact": True,
+            "all_robot_initial_states_use_actual_osc_commands": True,
+            "unique_robot_seeds": len({item["robot_seed"] for item in entries}),
+            "unique_robot_achieved_eef_xyz": len(
+                {
+                    tuple(float(value) for value in item["robot_achieved_eef_xyz"])
+                    for item in entries
+                }
+            ),
             "maximum_stabilization_drift": max(
                 item["maximum_object_position_drift_during_validation_hold"]
                 for item in entries
             ),
             "allowed_maximum_stabilization_drift": maximum_stabilization_drift,
+            "maximum_restore_ee_drift_m": max(
+                item["robot_eef_drift_during_validation_hold_m"]
+                for item in entries
+            ),
+            "maximum_restore_ee_observation_error_m": max(
+                item["explicit_restore_robot_eef_error_m"] for item in entries
+            ),
+            "allowed_maximum_restore_ee_observation_error_m": (
+                robot_randomization.maximum_restore_ee_observation_error
+            ),
+            "allowed_maximum_restore_ee_drift_m": robot_randomization.maximum_restore_ee_drift,
             "minimum_pairwise_placement_signature_l2": minimum_distance,
             "state_array_sha256": array_hash(state_array),
         }

@@ -8,7 +8,7 @@ import viser.transforms as vtf
 from PIL import Image, ImageDraw, ImageFont
 from scipy.spatial.transform import Rotation as SciRotation
 
-from capx.envs.base import BaseEnv
+from knowledge.api.env_protocol import BaseEnv
 from knowledge.api.base_api import ApiBase
 from knowledge.api.vision.graspnet import init_contact_graspnet
 from knowledge.api.vision.owlvit import init_owlvit

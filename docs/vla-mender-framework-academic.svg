@@ -1,0 +1,256 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1060" viewBox="0 0 1800 1060" role="img" aria-labelledby="title desc">
+  <title id="title">VLA-Mender: Evidence-Driven Closed-Loop Repair Harness</title>
+  <desc id="desc">Publication-style framework diagram showing baseline evaluation, failure diagnosis, verified intervention, programmatic repair, repaired-dataset construction, post-training, and standardized reevaluation.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#27364a"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#0072B2"/>
+    </marker>
+    <style>
+      text { font-family: Arial, Helvetica, "Noto Sans", sans-serif; fill: #172033; }
+      .figure-title { font-size: 29px; font-weight: 700; letter-spacing: .1px; }
+      .figure-subtitle { font-size: 14px; fill: #526174; }
+      .stage-label { font-size: 13px; font-weight: 700; fill: #ffffff; letter-spacing: .7px; }
+      .stage-title { font-size: 19px; font-weight: 700; }
+      .stage-subtitle { font-size: 11.5px; fill: #5d6979; }
+      .module-title { font-size: 14px; font-weight: 700; }
+      .module-text { font-size: 12px; fill: #465469; }
+      .code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 10.8px; fill: #3f4d62; }
+      .artifact { font-size: 11.5px; font-weight: 700; fill: #243247; }
+      .arrow-label { font-size: 10.5px; font-weight: 700; fill: #526174; }
+      .foundation-title { font-size: 13px; font-weight: 700; }
+      .foundation-text { font-size: 11px; fill: #526174; }
+      .legend { font-size: 10.5px; fill: #526174; }
+      .panel { fill: #ffffff; stroke: #9aa7b8; stroke-width: 1.4; }
+      .module { fill: #ffffff; stroke: #aab5c4; stroke-width: 1.1; }
+      .data-flow { fill: none; stroke: #27364a; stroke-width: 2; marker-end: url(#arrow); }
+      .control-flow { fill: none; stroke: #68778b; stroke-width: 1.7; stroke-dasharray: 6 5; marker-end: url(#arrow); }
+      .feedback-flow { fill: none; stroke: #0072B2; stroke-width: 2.2; stroke-dasharray: 8 5; marker-end: url(#arrow-blue); }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1060" fill="#ffffff"/>
+
+  <!-- Figure heading -->
+  <text x="48" y="43" class="figure-title">VLA-Mender: Evidence-Driven Closed-Loop Repair Harness</text>
+  <text x="48" y="68" class="figure-subtitle">From reproducible failure discovery to verified repair trajectories, targeted post-training, and standardized re-evaluation</text>
+  <line x1="48" y1="84" x2="1752" y2="84" stroke="#c7d0db" stroke-width="1"/>
+
+  <!-- System inputs -->
+  <text x="48" y="111" class="arrow-label">EXTERNAL INPUTS</text>
+  <rect x="48" y="121" width="250" height="55" rx="6" fill="#f5f8fb" stroke="#9aa7b8"/>
+  <text x="65" y="145" class="module-title">Benchmark specification</text>
+  <text x="65" y="164" class="module-text">task, initial states, seeds, controller</text>
+
+  <rect x="318" y="121" width="250" height="55" rx="6" fill="#eef7fc" stroke="#56a1cf"/>
+  <text x="335" y="145" class="module-title">VLA checkpoint</text>
+  <text x="335" y="164" class="module-text">pinned OpenPI policy + normalization</text>
+
+  <rect x="910" y="121" width="315" height="55" rx="6" fill="#fcf3fa" stroke="#c986b5"/>
+  <text x="927" y="145" class="module-title">Repair knowledge</text>
+  <text x="927" y="164" class="module-text">observation API · examples · reusable skills</text>
+
+  <rect x="1245" y="121" width="325" height="55" rx="6" fill="#f3faf7" stroke="#61ab93"/>
+  <text x="1262" y="145" class="module-title">External runtimes</text>
+  <text x="1262" y="164" class="module-text">LIBERO / MuJoCo · SAM3 · GraspNet · PyRoKi</text>
+
+  <!-- Input arrows -->
+  <path d="M173 176 L173 219" class="data-flow"/>
+  <path d="M443 176 L443 199 L350 199 L350 219" class="data-flow"/>
+  <path d="M1067 176 L1067 219" class="data-flow"/>
+  <path d="M1408 176 L1408 196 L1195 196 L1195 592" class="control-flow"/>
+
+  <!-- A: Baseline evaluation -->
+  <rect x="48" y="220" width="365" height="548" rx="9" class="panel" stroke="#0072B2"/>
+  <rect x="48" y="220" width="365" height="67" rx="9" fill="#e9f4fa"/>
+  <path d="M48 278 L413 278" stroke="#8bc1df"/>
+  <rect x="65" y="239" width="31" height="24" rx="4" fill="#0072B2"/>
+  <text x="75" y="256" class="stage-label">A</text>
+  <text x="109" y="248" class="stage-title">Baseline Policy Evaluation</text>
+  <text x="109" y="268" class="stage-subtitle">Shared, deterministic rollout semantics</text>
+
+  <rect x="72" y="313" width="317" height="82" rx="6" class="module"/>
+  <text x="90" y="338" class="module-title">Initial-state provider</text>
+  <text x="90" y="359" class="module-text">official · randomized BDDL · state manifest</text>
+  <text x="90" y="379" class="code">state_provider.py  |  scene/state hashes</text>
+
+  <path d="M230 395 L230 429" class="data-flow"/>
+
+  <rect x="72" y="430" width="317" height="126" rx="6" class="module"/>
+  <text x="90" y="455" class="module-title">Shared rollout core</text>
+  <text x="90" y="477" class="module-text">seeded reset → VLA inference → action dispatch</text>
+  <text x="90" y="499" class="module-text">binary gripper · native success · multi-GPU shards</text>
+  <rect x="90" y="516" width="127" height="24" rx="4" fill="#eef7fc" stroke="#8bc1df"/>
+  <text x="100" y="532" class="code">OpenPIBackend</text>
+  <rect x="230" y="516" width="141" height="24" rx="4" fill="#f5f8fb" stroke="#aab5c4"/>
+  <text x="240" y="532" class="code">LiberoRuntime</text>
+
+  <path d="M230 556 L230 590" class="data-flow"/>
+
+  <rect x="72" y="591" width="317" height="135" rx="6" fill="#f3f8fb" stroke="#6faed3" stroke-width="1.1"/>
+  <text x="90" y="616" class="module-title">Baseline evidence bank</text>
+  <text x="90" y="639" class="artifact">Trajectory states + executed actions</text>
+  <text x="90" y="661" class="artifact">Wide-view + wrist-view videos</text>
+  <text x="90" y="683" class="artifact">Episode outcomes + run manifest</text>
+  <text x="90" y="707" class="code">trajectory protocol v2</text>
+
+  <!-- B: diagnosis -->
+  <rect x="445" y="220" width="365" height="548" rx="9" class="panel" stroke="#E69F00"/>
+  <rect x="445" y="220" width="365" height="67" rx="9" fill="#fff6df"/>
+  <path d="M445 278 L810 278" stroke="#e8bf65"/>
+  <rect x="462" y="239" width="31" height="24" rx="4" fill="#E69F00"/>
+  <text x="472" y="256" class="stage-label">B</text>
+  <text x="506" y="248" class="stage-title">Diagnosis &amp; Intervention</text>
+  <text x="506" y="268" class="stage-subtitle">Observation-only, replay-verified handoff</text>
+
+  <rect x="469" y="313" width="317" height="91" rx="6" class="module"/>
+  <text x="487" y="338" class="module-title">Observation-only agent interface</text>
+  <text x="487" y="360" class="module-text">public states/actions + sampled timeline + videos</text>
+  <text x="487" y="383" class="code">agent_input.json  |  diagnosis prompt</text>
+
+  <path d="M627 404 L627 435" class="data-flow"/>
+
+  <rect x="469" y="436" width="317" height="112" rx="6" class="module"/>
+  <text x="487" y="461" class="module-title">Structured failure diagnosis</text>
+  <text x="487" y="483" class="module-text">phase · failure mode · first causal frame</text>
+  <text x="487" y="505" class="module-text">recoverable window · successful references</text>
+  <text x="487" y="528" class="code">complete failed-episode coverage required</text>
+
+  <path d="M627 548 L627 579" class="data-flow"/>
+
+  <rect x="469" y="580" width="317" height="146" rx="6" fill="#fff9ec" stroke="#d9a635" stroke-width="1.1"/>
+  <text x="487" y="605" class="module-title">Verified intervention materialization</text>
+  <text x="487" y="627" class="module-text">select window endpoints → replay VLA prefix</text>
+  <text x="487" y="649" class="module-text">check public-state tolerance → switch controller</text>
+  <text x="487" y="671" class="module-text">apply reset dynamics → atomically publish</text>
+  <text x="487" y="699" class="artifact">Repair handoff: reset bank + provenance</text>
+
+  <!-- C: Repair -->
+  <rect x="842" y="220" width="500" height="548" rx="9" class="panel" stroke="#CC79A7"/>
+  <rect x="842" y="220" width="500" height="67" rx="9" fill="#fbf0f8"/>
+  <path d="M842 278 L1342 278" stroke="#dca3c8"/>
+  <rect x="859" y="239" width="31" height="24" rx="4" fill="#CC79A7"/>
+  <text x="869" y="256" class="stage-label">C</text>
+  <text x="903" y="248" class="stage-title">Programmatic Repair Search</text>
+  <text x="903" y="268" class="stage-subtitle">Evidence-gated candidate evolution over failure-mode seed pools</text>
+
+  <rect x="866" y="313" width="213" height="102" rx="6" class="module"/>
+  <text x="884" y="338" class="module-title">Candidate synthesis</text>
+  <text x="884" y="360" class="module-text">full executable repair program</text>
+  <text x="884" y="381" class="module-text">parent + mechanism + change</text>
+  <text x="884" y="401" class="code">knowledge-guided</text>
+
+  <rect x="1102" y="313" width="216" height="102" rx="6" class="module"/>
+  <text x="1120" y="338" class="module-title">FM state machine</text>
+  <text x="1120" y="360" class="module-text">active / solved / abandoned seeds</text>
+  <text x="1120" y="381" class="module-text">coverage, budget, seed history</text>
+  <text x="1120" y="401" class="code">FailureModeSession</text>
+
+  <path d="M1079 364 L1102 364" class="data-flow"/>
+
+  <rect x="866" y="445" width="452" height="123" rx="6" class="module"/>
+  <text x="884" y="470" class="module-title">Smoke-gated evaluation and mechanism refinement</text>
+  <rect x="884" y="487" width="87" height="29" rx="4" fill="#f9eaf5" stroke="#d79bc2"/>
+  <text x="899" y="506" class="artifact">3–8 seeds</text>
+  <path d="M974 501 L1021 501" class="data-flow"/>
+  <rect x="1025" y="487" width="114" height="29" rx="4" fill="#f9eaf5" stroke="#d79bc2"/>
+  <text x="1039" y="506" class="artifact">video analysis</text>
+  <path d="M1142 501 L1189 501" class="data-flow"/>
+  <rect x="1193" y="487" width="105" height="29" rx="4" fill="#f9eaf5" stroke="#d79bc2"/>
+  <text x="1206" y="506" class="artifact">expand / stop</text>
+  <text x="884" y="545" class="module-text">Temporary mechanism clusters; strict improvement before promotion</text>
+
+  <path d="M1092 568 L1092 594" class="data-flow"/>
+
+  <rect x="866" y="595" width="452" height="131" rx="6" fill="#fcf5fa" stroke="#c986b5" stroke-width="1.1"/>
+  <text x="884" y="620" class="module-title">GPU-local repair runtime</text>
+  <text x="884" y="642" class="module-text">task/GPU leases · worker pool · reset verification</text>
+  <text x="884" y="664" class="code">TaskLocalRuntime → NativeLiberoPolicyEnv</text>
+  <text x="884" y="688" class="module-text">Perception and motion services are exposed through reduced APIs</text>
+  <text x="884" y="711" class="artifact">Evaluator-confirmed repair trajectories + promoted portfolio</text>
+
+  <!-- D: Learning loop -->
+  <rect x="1374" y="220" width="378" height="548" rx="9" class="panel" stroke="#009E73"/>
+  <rect x="1374" y="220" width="378" height="67" rx="9" fill="#ebf7f2"/>
+  <path d="M1374 278 L1752 278" stroke="#83bfae"/>
+  <rect x="1391" y="239" width="31" height="24" rx="4" fill="#009E73"/>
+  <text x="1401" y="256" class="stage-label">D</text>
+  <text x="1435" y="248" class="stage-title">Repair-to-Learning Loop</text>
+  <text x="1435" y="268" class="stage-subtitle">Quality-controlled data construction and policy update</text>
+
+  <rect x="1398" y="313" width="330" height="96" rx="6" class="module"/>
+  <text x="1416" y="338" class="module-title">Retained-only trajectory selection</text>
+  <text x="1416" y="360" class="module-text">verify job, reset, result, evidence, and lineage</text>
+  <text x="1416" y="382" class="code">research_quality_selection</text>
+
+  <path d="M1563 409 L1563 437" class="data-flow"/>
+
+  <rect x="1398" y="438" width="330" height="105" rx="6" class="module"/>
+  <text x="1416" y="463" class="module-title">Transition-aware dataset builder</text>
+  <text x="1416" y="485" class="module-text">VLA prefix [0, reset) + selected repair suffix</text>
+  <text x="1416" y="507" class="module-text">state/flow/schema checks + trainable chunk filter</text>
+  <text x="1416" y="529" class="artifact">Validated LeRobot v2 dataset</text>
+
+  <path d="M1563 543 L1563 571" class="data-flow"/>
+
+  <rect x="1398" y="572" width="330" height="75" rx="6" class="module"/>
+  <text x="1416" y="597" class="module-title">Pinned OpenPI post-training</text>
+  <text x="1416" y="619" class="module-text">filtered sampling · action loss mask · torchrun</text>
+  <text x="1416" y="638" class="artifact">Updated checkpoint</text>
+
+  <path d="M1563 647 L1563 675" class="data-flow"/>
+
+  <rect x="1398" y="676" width="330" height="50" rx="6" fill="#eef8f4" stroke="#61ab93" stroke-width="1.1"/>
+  <text x="1416" y="697" class="module-title">Standardized re-evaluation</text>
+  <text x="1416" y="715" class="code">shared state / runner / evaluator</text>
+
+  <!-- Cross-stage data arrows -->
+  <path d="M413 494 L445 494" class="data-flow"/>
+  <rect x="413" y="463" width="32" height="20" fill="#ffffff"/>
+  <text x="415" y="478" class="arrow-label">evidence</text>
+
+  <path d="M810 653 L842 653" class="data-flow"/>
+  <rect x="810" y="621" width="34" height="20" fill="#ffffff"/>
+  <text x="812" y="636" class="arrow-label">resets</text>
+
+  <path d="M1342 653 L1374 653" class="data-flow"/>
+  <rect x="1338" y="621" width="40" height="20" fill="#ffffff"/>
+  <text x="1340" y="636" class="arrow-label">repairs</text>
+
+  <!-- Feedback loop -->
+  <path d="M1563 726 L1563 794 C1563 813 1548 828 1529 828 L224 828 C196 828 173 805 173 777 L173 768" class="feedback-flow"/>
+  <rect x="708" y="811" width="338" height="34" rx="17" fill="#ffffff" stroke="#65a9d0"/>
+  <text x="745" y="833" class="artifact" fill="#0072B2">updated checkpoint → new failures → next repair cycle</text>
+
+  <!-- Shared foundations -->
+  <rect x="48" y="868" width="1704" height="126" rx="8" fill="#f7f9fb" stroke="#9aa7b8" stroke-width="1.2"/>
+  <text x="67" y="894" class="arrow-label">CROSS-CUTTING REPRODUCIBILITY AND SAFETY LAYER</text>
+  <line x1="67" y1="904" x2="1733" y2="904" stroke="#c7d0db"/>
+
+  <rect x="72" y="921" width="375" height="53" rx="5" fill="#ffffff" stroke="#bdc6d1"/>
+  <text x="88" y="943" class="foundation-title">Experiment contracts</text>
+  <text x="88" y="962" class="foundation-text">resolved YAML · fingerprints · protocol/version validation</text>
+
+  <rect x="469" y="921" width="375" height="53" rx="5" fill="#ffffff" stroke="#bdc6d1"/>
+  <text x="485" y="943" class="foundation-title">Fail-closed execution</text>
+  <text x="485" y="962" class="foundation-text">state hashes · replay tolerances · evaluator-backed success</text>
+
+  <rect x="866" y="921" width="375" height="53" rx="5" fill="#ffffff" stroke="#bdc6d1"/>
+  <text x="882" y="943" class="foundation-title">Auditable artifacts</text>
+  <text x="882" y="962" class="foundation-text">immutable writes · provenance · evidence cache · resumability</text>
+
+  <rect x="1263" y="921" width="465" height="53" rx="5" fill="#ffffff" stroke="#bdc6d1"/>
+  <text x="1279" y="943" class="foundation-title">Pinned and isolated dependencies</text>
+  <text x="1279" y="962" class="foundation-text">LIBERO control env (Py3.12) · OpenPI model env (Py3.11) · vendored sources</text>
+
+  <!-- Legend -->
+  <line x1="48" y1="1023" x2="93" y2="1023" class="data-flow"/>
+  <text x="105" y="1027" class="legend">data / artifact flow</text>
+  <line x1="245" y1="1023" x2="290" y2="1023" class="control-flow"/>
+  <text x="302" y="1027" class="legend">runtime dependency / control</text>
+  <line x1="507" y1="1023" x2="552" y2="1023" class="feedback-flow"/>
+  <text x="564" y="1027" class="legend">closed-loop feedback</text>
+  <text x="1752" y="1027" text-anchor="end" class="legend">VLA-Mender framework · publication-ready vector figure</text>
+</svg>

@@ -10,7 +10,7 @@ from knowledge.api.vision.sam3 import init_sam3
 from knowledge.api.vision.graspnet import init_contact_graspnet
 from knowledge.api.motion.pyroki import init_pyroki
 
-from capx.envs.base import (
+from knowledge.api.env_protocol import (
     BaseEnv,
 )
 from knowledge.api.base_api import ApiBase
@@ -460,4 +460,3 @@ def _draw_boxes(
     rgb: np.ndarray, boxes: list[list[float]], labels: list[str], scores: list[float] | None = None
 ) -> Image.Image:
     return draw_boxes(rgb, boxes, labels, scores)
-

@@ -3,7 +3,7 @@ from typing import Any
 import numpy as np
 from scipy.spatial.transform import Rotation as SciRotation
 
-from capx.envs.base import (
+from knowledge.api.env_protocol import (
     BaseEnv,
 )
 from knowledge.api.base_api import ApiBase

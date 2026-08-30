@@ -10,10 +10,9 @@ from typing import Any
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
-import requests
 from PIL import Image
 
-from knowledge.api.utils.serve_utils import post_with_retries
+from knowledge.api.utils.serve_utils import ToolServiceError, post_with_retries
 
 """SAM 3 integration via FastAPI service."""
 
@@ -70,9 +69,10 @@ def init_sam3(
         try:
             resp = post_with_retries(f"{service_url}/segment", payload)
             results_data = resp["results"]
-        except Exception as e:
-            print(f"Failed to communicate with SAM3 service at {service_url}: {e}")
-            return []
+        except ToolServiceError as exc:
+            raise ToolServiceError(
+                f"Failed to communicate with SAM3 service at {service_url}: {exc}"
+            ) from exc
 
         if not results_data:
             print(f"SAM3 returned no results for prompt: '{text_prompt}'")
@@ -208,8 +208,10 @@ def init_sam3_point_prompt(
 
         try:
             resp = post_with_retries(f"{service_url}/segment_point", payload)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to communicate with SAM3 service at {service_url}: {e}")
+        except ToolServiceError as exc:
+            raise ToolServiceError(
+                f"Failed to communicate with SAM3 service at {service_url}: {exc}"
+            ) from exc
 
         scores = resp.get("scores", [])
         masks_shape = tuple(resp.get("masks_shape", (0, 0, 0)))

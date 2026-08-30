@@ -1,0 +1,256 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200" viewBox="0 0 1800 1200" role="img" aria-labelledby="title desc">
+  <title id="title">VLA-Mender 当前项目框架</title>
+  <desc id="desc">展示从基线评测、失败诊断、程序化修复、数据集构建、OpenPI 后训练到再评测的闭环，以及共享运行时和第三方依赖。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="1" stop-color="#111b31"/>
+    </linearGradient>
+    <linearGradient id="header" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="0.55" stop-color="#818cf8"/>
+      <stop offset="1" stop-color="#c084fc"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000814" flood-opacity="0.45"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrowCyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#22d3ee"/>
+    </marker>
+    <style>
+      text { font-family: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif; }
+      .title { font-size: 34px; font-weight: 750; fill: #f8fafc; letter-spacing: 0.5px; }
+      .subtitle { font-size: 16px; fill: #a5b4fc; }
+      .section { font-size: 18px; font-weight: 700; fill: #f8fafc; }
+      .stageNo { font-size: 13px; font-weight: 750; fill: #08111f; }
+      .stageTitle { font-size: 21px; font-weight: 750; fill: #f8fafc; }
+      .module { font-size: 14px; font-weight: 650; fill: #e2e8f0; }
+      .detail { font-size: 13px; fill: #cbd5e1; }
+      .mono { font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace; font-size: 12px; fill: #a5b4fc; }
+      .artifact { font-size: 12px; font-weight: 650; fill: #dbeafe; }
+      .tiny { font-size: 11px; fill: #94a3b8; }
+      .box { fill: #111c33; stroke: #334155; stroke-width: 1.5; }
+      .inner { fill: #0b1528; stroke: #26354e; stroke-width: 1; }
+      .arrow { fill: none; stroke: #94a3b8; stroke-width: 2.4; marker-end: url(#arrow); }
+      .feedback { fill: none; stroke: #22d3ee; stroke-width: 2.5; stroke-dasharray: 8 7; marker-end: url(#arrowCyan); }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1200" fill="url(#bg)"/>
+  <circle cx="1660" cy="70" r="230" fill="#312e81" opacity="0.12"/>
+  <circle cx="120" cy="1120" r="250" fill="#155e75" opacity="0.10"/>
+
+  <text x="60" y="62" class="title">VLA-Mender 当前项目框架</text>
+  <text x="60" y="91" class="subtitle">面向 LIBERO / OpenPI 的 VLA 失败修复闭环：基线轨迹 → 诊断与可恢复状态 → 程序修复 → 数据拼接 → 后训练 → 再评测</text>
+  <rect x="60" y="108" width="1680" height="4" rx="2" fill="url(#header)" opacity="0.9"/>
+
+  <!-- Entry points -->
+  <g filter="url(#shadow)">
+    <rect x="60" y="140" width="1680" height="90" rx="18" class="box"/>
+  </g>
+  <text x="84" y="171" class="section">配置与入口层</text>
+  <text x="84" y="201" class="mono">experiment/campaign YAML</text>
+  <text x="300" y="201" class="detail">→</text>
+  <text x="326" y="201" class="mono">workflow.pipeline</text>
+  <text x="540" y="201" class="mono">run.repair.generate_prompt</text>
+  <text x="800" y="201" class="mono">RepairCampaign API</text>
+  <text x="1010" y="201" class="mono">run.dataset.build / train</text>
+  <text x="1284" y="201" class="mono">scripts/eval/run_eval.sh</text>
+  <rect x="1510" y="164" width="202" height="44" rx="12" fill="#172554" stroke="#4f46e5"/>
+  <text x="1530" y="184" class="artifact">统一契约</text>
+  <text x="1530" y="200" class="tiny">绝对路径 · fingerprint · fail-closed</text>
+
+  <!-- Main arrows behind stages -->
+  <path d="M 354 525 L 390 525" class="arrow"/>
+  <path d="M 689 525 L 725 525" class="arrow"/>
+  <path d="M 1024 525 L 1060 525" class="arrow"/>
+  <path d="M 1359 525 L 1395 525" class="arrow"/>
+
+  <!-- Stage 1 -->
+  <g filter="url(#shadow)">
+    <rect x="55" y="270" width="300" height="510" rx="20" class="box" stroke="#0891b2"/>
+  </g>
+  <rect x="75" y="290" width="42" height="26" rx="13" fill="#22d3ee"/>
+  <text x="87" y="308" class="stageNo">01</text>
+  <text x="130" y="310" class="stageTitle">基线 Rollout</text>
+  <text x="75" y="340" class="mono">workflow/rollout/*</text>
+
+  <rect x="75" y="364" width="260" height="94" rx="12" class="inner"/>
+  <text x="91" y="388" class="module">InitialStateProvider</text>
+  <text x="91" y="410" class="detail">official / randomized_bddl / manifest</text>
+  <text x="91" y="432" class="detail">可复现 scene seed 与 state hash</text>
+
+  <rect x="75" y="474" width="260" height="108" rx="12" class="inner"/>
+  <text x="91" y="498" class="module">Runner + Evaluator</text>
+  <text x="91" y="520" class="detail">GPU 分片 · policy seed · action chunk</text>
+  <text x="91" y="542" class="detail">reset / 推理 / action dispatch / done</text>
+  <text x="91" y="564" class="mono">OpenPIBackend ↔ LiberoRuntime</text>
+
+  <rect x="75" y="598" width="260" height="100" rx="12" fill="#082f49" stroke="#0e7490"/>
+  <text x="91" y="623" class="module">基线证据库</text>
+  <text x="91" y="645" class="artifact">episodes/*.json · summary.json</text>
+  <text x="91" y="667" class="artifact">wide.mp4 · wrist.mp4</text>
+  <text x="91" y="685" class="tiny">成功与失败轨迹全部保留</text>
+  <text x="75" y="744" class="tiny">共享 standalone eval 的 state / runner / evaluator</text>
+
+  <!-- Stage 2 -->
+  <g filter="url(#shadow)">
+    <rect x="390" y="270" width="300" height="510" rx="20" class="box" stroke="#4f46e5"/>
+  </g>
+  <rect x="410" y="290" width="42" height="26" rx="13" fill="#818cf8"/>
+  <text x="422" y="308" class="stageNo">02</text>
+  <text x="465" y="310" class="stageTitle">诊断与 Reset Bank</text>
+  <text x="410" y="340" class="mono">failure_diagnosis/*</text>
+
+  <rect x="410" y="364" width="260" height="94" rx="12" class="inner"/>
+  <text x="426" y="388" class="module">Observation-only Handoff</text>
+  <text x="426" y="410" class="detail">仅导出公开状态、动作、双视角视频</text>
+  <text x="426" y="432" class="artifact">agent_input.json + prompt.md</text>
+
+  <rect x="410" y="474" width="260" height="108" rx="12" class="inner"/>
+  <text x="426" y="498" class="module">失败诊断契约</text>
+  <text x="426" y="520" class="detail">failure phase / mode / causal frame</text>
+  <text x="426" y="542" class="detail">recoverable window + 成功参考轨迹</text>
+  <text x="426" y="564" class="detail">逐失败 episode 完整覆盖校验</text>
+
+  <rect x="410" y="598" width="260" height="100" rx="12" fill="#1e1b4b" stroke="#4f46e5"/>
+  <text x="426" y="623" class="module">前缀重放与状态物化</text>
+  <text x="426" y="645" class="detail">窗口首/末帧 → public-state 验证</text>
+  <text x="426" y="667" class="artifact">repair_handoff/manifest.json</text>
+  <text x="426" y="685" class="tiny">private reset state + agent view</text>
+  <text x="410" y="744" class="tiny">原子发布；replay 漂移或契约不符即拒绝</text>
+
+  <!-- Stage 3 -->
+  <g filter="url(#shadow)">
+    <rect x="725" y="270" width="300" height="510" rx="20" class="box" stroke="#a855f7"/>
+  </g>
+  <rect x="745" y="290" width="42" height="26" rx="13" fill="#c084fc"/>
+  <text x="757" y="308" class="stageNo">03</text>
+  <text x="800" y="310" class="stageTitle">程序化 Repair</text>
+  <text x="745" y="340" class="mono">workflow/research/*</text>
+
+  <rect x="745" y="364" width="260" height="104" rx="12" class="inner"/>
+  <text x="761" y="388" class="module">RepairCampaign / TaskSession</text>
+  <text x="761" y="410" class="detail">任务与 GPU 租约 · 动态 seed 调度</text>
+  <text x="761" y="432" class="detail">每个 Failure Mode 一个状态机</text>
+  <text x="761" y="452" class="mono">FailureModeSession</text>
+
+  <rect x="745" y="482" width="260" height="108" rx="12" class="inner"/>
+  <text x="761" y="506" class="module">候选搜索与证据门禁</text>
+  <text x="761" y="528" class="detail">initial → smoke → cluster → expand</text>
+  <text x="761" y="550" class="detail">双视角失败分析 · promote_best</text>
+  <text x="761" y="572" class="detail">coverage / budget / seed history</text>
+
+  <rect x="745" y="604" width="260" height="112" rx="12" fill="#32134f" stroke="#9333ea"/>
+  <text x="761" y="628" class="module">执行运行时</text>
+  <text x="761" y="650" class="detail">TaskLocalRuntime → GPU worker</text>
+  <text x="761" y="672" class="mono">NativeLiberoPolicyEnv</text>
+  <text x="761" y="694" class="artifact">candidate / attempts / experience</text>
+  <text x="745" y="744" class="tiny">修复策略是可审计 Python 程序，不是直接改 VLA 权重</text>
+
+  <!-- Stage 4 -->
+  <g filter="url(#shadow)">
+    <rect x="1060" y="270" width="300" height="510" rx="20" class="box" stroke="#ea580c"/>
+  </g>
+  <rect x="1080" y="290" width="42" height="26" rx="13" fill="#fb923c"/>
+  <text x="1092" y="308" class="stageNo">04</text>
+  <text x="1135" y="310" class="stageTitle">修复数据集构建</text>
+  <text x="1080" y="340" class="mono">workflow/dataset/*</text>
+
+  <rect x="1080" y="364" width="260" height="96" rx="12" class="inner"/>
+  <text x="1096" y="388" class="module">Research Manifest</text>
+  <text x="1096" y="410" class="detail">读取 retained-only 质量选择结果</text>
+  <text x="1096" y="432" class="detail">核验 reset / result / evidence lineage</text>
+
+  <rect x="1080" y="474" width="260" height="108" rx="12" class="inner"/>
+  <text x="1096" y="498" class="module">轨迹拼接 Builder</text>
+  <text x="1096" y="520" class="detail">[0, reset_frame) VLA prefix</text>
+  <text x="1096" y="542" class="detail">+ selected repair suffix</text>
+  <text x="1096" y="564" class="detail">相机 / action / task schema 映射</text>
+
+  <rect x="1080" y="598" width="260" height="112" rx="12" fill="#431407" stroke="#c2410c"/>
+  <text x="1096" y="622" class="module">连续性与训练门禁</text>
+  <text x="1096" y="644" class="detail">sim hash · splice state · optical flow</text>
+  <text x="1096" y="666" class="artifact">LeRobot v2 dataset</text>
+  <text x="1096" y="688" class="artifact">trainable_index_manifest.json</text>
+  <text x="1080" y="744" class="tiny">排除 guard、terminal 与跨拼接边界 action chunk</text>
+
+  <!-- Stage 5 -->
+  <g filter="url(#shadow)">
+    <rect x="1395" y="270" width="350" height="510" rx="20" class="box" stroke="#16a34a"/>
+  </g>
+  <rect x="1415" y="290" width="42" height="26" rx="13" fill="#4ade80"/>
+  <text x="1427" y="308" class="stageNo">05</text>
+  <text x="1470" y="310" class="stageTitle">OpenPI 后训练与再评测</text>
+  <text x="1415" y="340" class="mono">workflow/training/* + scripts/eval</text>
+
+  <rect x="1415" y="364" width="310" height="108" rx="12" class="inner"/>
+  <text x="1431" y="388" class="module">Training Preflight</text>
+  <text x="1431" y="410" class="detail">pinned commit / checkpoint / norm stats</text>
+  <text x="1431" y="432" class="detail">sampling: transition_aware 或 native</text>
+  <text x="1431" y="454" class="mono">TrainableIndexDataset</text>
+
+  <rect x="1415" y="486" width="310" height="96" rx="12" class="inner"/>
+  <text x="1431" y="510" class="module">Pinned OpenPI Torchrun</text>
+  <text x="1431" y="532" class="detail">注入 YAML 配置、action horizon 与 loss mask</text>
+  <text x="1431" y="554" class="artifact">new checkpoints / training metadata</text>
+
+  <rect x="1415" y="596" width="310" height="112" rx="12" fill="#052e16" stroke="#15803d"/>
+  <text x="1431" y="620" class="module">Standalone Evaluation</text>
+  <text x="1431" y="642" class="detail">复用 rollout state / runner / evaluator</text>
+  <text x="1431" y="664" class="detail">多 GPU、多任务、resume、统一汇总</text>
+  <text x="1431" y="686" class="artifact">eval_contract.json + summary.json</text>
+  <text x="1415" y="744" class="tiny">评测失败可进入下一轮 mending 闭环</text>
+
+  <!-- Feedback loop -->
+  <path d="M 1600 780 C 1600 835, 210 835, 210 782" class="feedback"/>
+  <rect x="759" y="807" width="282" height="30" rx="15" fill="#083344" stroke="#0891b2"/>
+  <text x="789" y="827" class="artifact">checkpoint 再评测 → 新失败进入下一轮</text>
+
+  <!-- Shared foundation -->
+  <g filter="url(#shadow)">
+    <rect x="60" y="865" width="1680" height="270" rx="22" fill="#0b1427" stroke="#334155" stroke-width="1.5"/>
+  </g>
+  <text x="84" y="900" class="section">共享底座与横切能力</text>
+
+  <rect x="84" y="920" width="380" height="178" rx="15" class="inner"/>
+  <text x="104" y="949" class="module">核心仿真与模型桥</text>
+  <text x="104" y="975" class="mono">LiberoRuntime</text>
+  <text x="104" y="997" class="detail">LIBERO-PRO · robosuite · MuJoCo · OSC/joint</text>
+  <text x="104" y="1025" class="mono">OpenPIBackend</text>
+  <text x="104" y="1047" class="detail">延迟加载、commit pin、独立 Python 3.11 环境</text>
+  <text x="104" y="1075" class="tiny">控制/数据环境为 Python 3.12；模型环境保持隔离</text>
+
+  <rect x="486" y="920" width="380" height="178" rx="15" class="inner"/>
+  <text x="506" y="949" class="module">知识与工具服务</text>
+  <text x="506" y="975" class="mono">knowledge/api · examples · skills</text>
+  <text x="506" y="997" class="detail">观察可用的 LIBERO API、修复程序与技能库</text>
+  <text x="506" y="1025" class="mono">TaskServiceManager</text>
+  <text x="506" y="1047" class="detail">SAM3 · Contact-GraspNet · PyRoKi</text>
+  <text x="506" y="1075" class="tiny">每 GPU 服务组；health check、端口与进程归属可追踪</text>
+
+  <rect x="888" y="920" width="380" height="178" rx="15" class="inner"/>
+  <text x="908" y="949" class="module">契约、协议与质量门禁</text>
+  <text x="908" y="975" class="mono">parameters.py · trajectory_protocol.py</text>
+  <text x="908" y="997" class="detail">resolved YAML · settings fingerprint · protocol v2</text>
+  <text x="908" y="1025" class="detail">replay tolerance · state hash · schema validation</text>
+  <text x="908" y="1047" class="detail">不可变/原子产物 · provenance · fail-closed</text>
+  <text x="908" y="1075" class="tiny">测试覆盖 pre-repair / repair / dataset / training</text>
+
+  <rect x="1290" y="920" width="426" height="178" rx="15" class="inner"/>
+  <text x="1310" y="949" class="module">源码布局与产物</text>
+  <text x="1310" y="975" class="mono">src/run/</text>
+  <text x="1400" y="975" class="detail">薄入口、配置与 prompt</text>
+  <text x="1310" y="999" class="mono">src/workflow/</text>
+  <text x="1430" y="999" class="detail">核心业务与运行时</text>
+  <text x="1310" y="1023" class="mono">scripts/ + tools/</text>
+  <text x="1455" y="1023" class="detail">评测、安装、服务启动</text>
+  <text x="1310" y="1047" class="mono">outputs/</text>
+  <text x="1400" y="1047" class="detail">轨迹、证据、数据、checkpoint</text>
+  <text x="1310" y="1075" class="tiny">third_party/ 固定 OpenPI、LIBERO 与视觉工具源码版本</text>
+
+  <text x="60" y="1170" class="tiny">依据当前工作区源码整理 · 主体设计：可复现、证据驱动、失败关闭、产物可追溯</text>
+</svg>

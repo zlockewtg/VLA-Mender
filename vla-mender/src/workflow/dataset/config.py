@@ -132,6 +132,24 @@ class ActionConfig:
 
 
 @dataclass(frozen=True)
+class DemoVideosConfig:
+    enabled: bool = True
+    count: int = 3
+
+    @classmethod
+    def parse(cls, value: Mapping[str, Any] | None) -> "DemoVideosConfig":
+        data = dict(value or {})
+        _unknown("demo_videos", data, set(cls.__dataclass_fields__))
+        result = cls(
+            enabled=bool(data.get("enabled", True)),
+            count=int(data.get("count", 3)),
+        )
+        if result.count <= 0:
+            raise ValueError("demo_videos.count must be positive")
+        return result
+
+
+@dataclass(frozen=True)
 class DatasetBuildConfig:
     config_path: Path
     output: Path
@@ -142,10 +160,12 @@ class DatasetBuildConfig:
     action_horizon: int
     pre_guard_frames: int
     post_guard_frames: int
+    allow_splice_crossing_action_chunks: bool
     columns: ColumnsConfig
     repair_columns: RepairColumnsConfig
     cameras: dict[str, CameraConfig]
     action: ActionConfig
+    demo_videos: DemoVideosConfig = field(default_factory=DemoVideosConfig)
     continuity: ContinuityConfig = field(default_factory=ContinuityConfig)
     task_catalog: Path | None = None
     require_terminal_success: bool = True
@@ -186,11 +206,13 @@ def load_config(path: str | Path) -> DatasetBuildConfig:
         "action_horizon",
         "pre_guard_frames",
         "post_guard_frames",
+        "allow_splice_crossing_action_chunks",
         "columns",
         "repair_columns",
         "cameras",
         "action",
         "continuity",
+        "demo_videos",
         "task_catalog",
         "require_terminal_success",
         "provenance_files",
@@ -214,6 +236,9 @@ def load_config(path: str | Path) -> DatasetBuildConfig:
         action_horizon=int(data.get("action_horizon", 50)),
         pre_guard_frames=int(data.get("pre_guard_frames", 20)),
         post_guard_frames=int(data.get("post_guard_frames", 5)),
+        allow_splice_crossing_action_chunks=bool(
+            data.get("allow_splice_crossing_action_chunks", False)
+        ),
         columns=ColumnsConfig.parse(data.get("columns")),
         repair_columns=RepairColumnsConfig.parse(data.get("repair_columns")),
         cameras={
@@ -221,6 +246,7 @@ def load_config(path: str | Path) -> DatasetBuildConfig:
             for name, settings in cameras_raw.items()
         },
         action=ActionConfig.parse(data["action"]),
+        demo_videos=DemoVideosConfig.parse(data.get("demo_videos")),
         continuity=ContinuityConfig.parse(data.get("continuity")),
         task_catalog=_resolve(base, data.get("task_catalog")),
         require_terminal_success=bool(data.get("require_terminal_success", True)),

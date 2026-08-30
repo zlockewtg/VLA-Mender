@@ -26,8 +26,8 @@ controller:
   source_control_space: osc
   target_control_space: osc
 reset:
-  frames_per_failure: 3
-  frame_stride: 5
+  candidate_selection: pre_window_and_endpoints
+  prevention_steps: 10
   dynamics: preserve_full_state  # preserve_full_state | quiescent_osc
 backend:
   name: openpi

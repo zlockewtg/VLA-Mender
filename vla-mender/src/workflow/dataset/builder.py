@@ -20,7 +20,7 @@ import pyarrow.parquet as pq
 
 from .config import DatasetBuildConfig
 from .continuity import flow_metrics, require, validate_simulator_evidence
-from .manifest import EpisodeSource, ImageSource, load_episode_manifest
+from .manifest import EpisodeSource, ImageSource, SegmentSource, load_episode_manifest
 from .media import (
     decode_embedded_image,
     embedded_png_frames,
@@ -103,6 +103,72 @@ class ImageAccumulator(Accumulator):
 
 def _read_tasks(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def _trajectory_table(
+    source: SegmentSource, config: DatasetBuildConfig, *, repair: bool
+) -> pa.Table:
+    """Adapt VLA-Mender public trajectory JSON to the builder's tabular contract."""
+
+    require(source.trajectory is not None, "trajectory source path is missing")
+    payload = json.loads(source.trajectory.read_text(encoding="utf-8"))
+    require(isinstance(payload, dict), f"trajectory must be an object: {source.trajectory}")
+    states = payload.get("states")
+    actions = payload.get("actions")
+    require(isinstance(states, list) and states, f"trajectory has no states: {source.trajectory}")
+    require(isinstance(actions, list) and actions, f"trajectory has no actions: {source.trajectory}")
+    require(
+        len(states) == len(actions),
+        f"trajectory state/action lengths differ: {source.trajectory}",
+    )
+    if not repair:
+        return pa.table(
+            {
+                config.columns.state: states,
+                config.columns.action: actions,
+            }
+        )
+
+    rewards = payload.get("rewards")
+    successes = payload.get("success_flags", payload.get("successes"))
+    require(
+        isinstance(rewards, list) and len(rewards) == len(states),
+        f"repair trajectory rewards do not align: {source.trajectory}",
+    )
+    require(
+        isinstance(successes, list) and len(successes) == len(states),
+        f"repair trajectory success flags do not align: {source.trajectory}",
+    )
+    columns = config.repair_columns
+    values: dict[str, Any] = {
+        columns.state: states,
+        columns.action: actions,
+        columns.action_valid: [True] * len(states),
+    }
+    if columns.reward is not None:
+        values[columns.reward] = rewards
+    if columns.done is not None:
+        values[columns.done] = successes
+    return pa.table(values)
+
+
+def _load_segment_table(
+    source: SegmentSource, config: DatasetBuildConfig, *, repair: bool
+) -> pa.Table:
+    if source.parquet is not None:
+        require(source.parquet.is_file(), f"missing segment parquet: {source.parquet}")
+        return pq.read_table(source.parquet)
+    require(
+        source.trajectory is not None and source.trajectory.is_file(),
+        f"missing segment trajectory: {source.trajectory}",
+    )
+    return _trajectory_table(source, config, repair=repair)
+
+
+def _segment_payload_path(source: SegmentSource) -> Path:
+    path = source.parquet or source.trajectory
+    require(path is not None, "segment has no payload path")
+    return path
 
 
 def _action_transform(actions: np.ndarray, config: DatasetBuildConfig) -> np.ndarray:
@@ -290,6 +356,40 @@ def _validate_reference(config: DatasetBuildConfig) -> tuple[dict[str, Any], pa.
     return info, schema, tasks
 
 
+def _require_reference_vector_contract(
+    reference_info: dict[str, Any],
+    reference_schema: pa.Schema,
+    config: DatasetBuildConfig,
+) -> None:
+    """Fail before loading episodes when configured vectors differ from reference."""
+
+    configured = {
+        config.columns.state: config.action.state_dim,
+        config.columns.action: config.action.action_dim,
+    }
+    info_features = reference_info.get("features")
+    require(isinstance(info_features, dict), "reference info.json has no features object")
+    for name, width in configured.items():
+        index = reference_schema.get_field_index(name)
+        require(index >= 0, f"reference schema has no {name} column")
+        field = reference_schema.field(index)
+        require(
+            pa.types.is_fixed_size_list(field.type),
+            f"reference column {name} is not a fixed-size list: {field.type}",
+        )
+        reference_width = int(field.type.list_size)
+        require(
+            width == reference_width,
+            f"configured {name} width {width} differs from reference width {reference_width}",
+        )
+        feature = info_features.get(name)
+        require(isinstance(feature, dict), f"reference info.json has no {name} feature")
+        require(
+            feature.get("shape") == [reference_width],
+            f"reference info.json {name} shape differs from parquet schema",
+        )
+
+
 def _action_summary(actions: np.ndarray) -> dict[str, Any]:
     delta = np.diff(actions, axis=0) if len(actions) > 1 else np.zeros((0, actions.shape[1]))
     return {
@@ -313,6 +413,7 @@ def build_dataset(config: DatasetBuildConfig) -> dict[str, Any]:
     output = config.output.resolve()
     require(not output.exists(), f"refusing to overwrite existing output: {output}")
     reference_info, reference_schema, task_catalog = _validate_reference(config)
+    _require_reference_vector_contract(reference_info, reference_schema, config)
     episodes = load_episode_manifest(config.episodes_manifest)
     task_by_index = {int(item["task_index"]): str(item["task"]) for item in task_catalog}
     for episode in episodes:
@@ -352,8 +453,7 @@ def build_dataset(config: DatasetBuildConfig) -> dict[str, Any]:
         maximum_splice_error = 0.0
 
         for episode_index, source in enumerate(episodes):
-            require(source.repair.parquet.is_file(), f"missing repair parquet: {source.repair.parquet}")
-            repair_table = pq.read_table(source.repair.parquet)
+            repair_table = _load_segment_table(source.repair, config, repair=True)
             columns = config.columns
             repair_only = source.mode == "repair_only"
             restart = 0 if repair_only else source.restart_frame
@@ -362,15 +462,11 @@ def build_dataset(config: DatasetBuildConfig) -> dict[str, Any]:
             prefix_actions = np.empty((0, config.action.action_dim), dtype=np.float32)
             if not repair_only:
                 require(source.prefix is not None, "prefix_plus_repair episode has no prefix")
-                require(
-                    source.prefix.parquet.is_file(),
-                    f"missing prefix parquet: {source.prefix.parquet}",
-                )
-                prefix_table = pq.read_table(source.prefix.parquet)
+                prefix_table = _load_segment_table(source.prefix, config, repair=False)
                 require(restart < len(prefix_table), f"restart frame {restart} outside prefix source")
                 require(
                     {columns.state, columns.action} <= set(prefix_table.column_names),
-                    "prefix parquet misses state/action columns",
+                    "prefix payload misses state/action columns",
                 )
                 prefix_states = np.asarray(
                     prefix_table[columns.state].to_pylist()[:restart], dtype=np.float32
@@ -536,7 +632,9 @@ def build_dataset(config: DatasetBuildConfig) -> dict[str, Any]:
                         ),
                         "trainable": not guarded and not terminal,
                         "continuous_segment_id": (
-                            f"{episode_index}:"
+                            f"{episode_index}:native_episode"
+                            if not repair_only and config.allow_splice_crossing_action_chunks
+                            else f"{episode_index}:"
                             f"{'vla_prefix' if in_prefix else 'repair_only' if repair_only else 'repair_suffix'}"
                         ),
                         "terminal_guard": terminal,
@@ -567,14 +665,38 @@ def build_dataset(config: DatasetBuildConfig) -> dict[str, Any]:
                 "repair_suffix_length": len(repair_states),
                 "splice_frame_index": None if repair_only else restart,
                 "splice_state_max_abs_error": splice_error,
+                "source_prefix_payload": (
+                    str(_segment_payload_path(source.prefix)) if source.prefix is not None else None
+                ),
+                "source_prefix_payload_sha256": (
+                    sha256_file(_segment_payload_path(source.prefix))
+                    if source.prefix is not None
+                    else None
+                ),
                 "source_prefix_parquet": (
-                    str(source.prefix.parquet) if source.prefix is not None else None
+                    str(source.prefix.parquet)
+                    if source.prefix is not None and source.prefix.parquet is not None
+                    else None
                 ),
                 "source_prefix_parquet_sha256": (
-                    sha256_file(source.prefix.parquet) if source.prefix is not None else None
+                    sha256_file(source.prefix.parquet)
+                    if source.prefix is not None and source.prefix.parquet is not None
+                    else None
                 ),
-                "source_repair_parquet": str(source.repair.parquet),
-                "source_repair_parquet_sha256": sha256_file(source.repair.parquet),
+                "source_repair_payload": str(_segment_payload_path(source.repair)),
+                "source_repair_payload_sha256": sha256_file(
+                    _segment_payload_path(source.repair)
+                ),
+                "source_repair_parquet": (
+                    str(source.repair.parquet)
+                    if source.repair.parquet is not None
+                    else None
+                ),
+                "source_repair_parquet_sha256": (
+                    sha256_file(source.repair.parquet)
+                    if source.repair.parquet is not None
+                    else None
+                ),
                 "simulator_continuity": simulator_evidence,
                 "visual_continuity": visual,
                 "repair_transition_evidence": transition,
@@ -616,6 +738,7 @@ def build_dataset(config: DatasetBuildConfig) -> dict[str, Any]:
             {
                 "total_episodes": len(episodes),
                 "total_frames": global_index,
+                "total_tasks": len(task_catalog),
                 "total_videos": 0,
                 "total_chunks": math.ceil(len(episodes) / int(info.get("chunks_size", 1000))),
                 "fps": config.fps,
@@ -667,7 +790,9 @@ def build_dataset(config: DatasetBuildConfig) -> dict[str, Any]:
             "policies": {
                 "prefix_range": "[0, restart_frame)",
                 "duplicate_restart_state_avoided": True,
-                "splice_crossing_action_chunks_trainable": False,
+                "splice_crossing_action_chunks_trainable": (
+                    config.allow_splice_crossing_action_chunks
+                ),
                 "pre_guard_frames": config.pre_guard_frames,
                 "post_guard_frames": config.post_guard_frames,
                 "repair_only_intervention_guard_frames": 0,
@@ -685,6 +810,18 @@ def build_dataset(config: DatasetBuildConfig) -> dict[str, Any]:
             global_index,
             config,
         )
+        demo_manifest: dict[str, Any] | None = None
+        if config.demo_videos.enabled:
+            from .demo_videos import render_demo_videos
+
+            demo_manifest = render_demo_videos(
+                staging,
+                meta_dir / "visualization/trajectory_demos",
+                camera_columns=tuple(config.cameras),
+                fps=config.fps,
+                count=config.demo_videos.count,
+                dataset_identity=config.output,
+            )
         report = {
             "schema_version": 1,
             "created_at": utc_now(),
@@ -702,6 +839,14 @@ def build_dataset(config: DatasetBuildConfig) -> dict[str, Any]:
             "max_splice_state_abs_error": maximum_splice_error,
             "all_simulator_continuity_verified": config.continuity.require_simulator_evidence,
             "all_visual_continuity_verified": True,
+            "demo_video_count": (
+                int(demo_manifest["demo_count"]) if demo_manifest is not None else 0
+            ),
+            "demo_video_manifest": (
+                "meta/visualization/trajectory_demos/manifest.json"
+                if demo_manifest is not None
+                else None
+            ),
         }
         write_json(meta_dir / "validation_report.json", report)
         require(report["valid"], f"output validation failed: {errors}")
@@ -716,8 +861,11 @@ def build_dataset(config: DatasetBuildConfig) -> dict[str, Any]:
             "builder.py",
             "config.py",
             "continuity.py",
+            "demo_videos.py",
             "manifest.py",
             "media.py",
+            "research_manifest.py",
+            "run.py",
         ):
             shutil.copy2(Path(__file__).with_name(module_name), programs / module_name)
         copied: list[dict[str, str]] = []

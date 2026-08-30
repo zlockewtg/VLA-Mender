@@ -9,6 +9,11 @@ Cap-X 的 `capx/integrations`；其直接依赖的通用工具从 `capx/utils` �
 
 ## 核心接口
 
+- Repair agent 不依赖静态 API manifest。任务开始时应直接读取
+  `workflow/research/libero_backend.py` 中的 `_api_for`，再检查所选 API 类的
+  `functions()` 映射、签名、docstring 和实际函数实现。只把这些结果列入临时
+  Markdown 清单；不写入 campaign/candidate artifact，也不把 privileged 实现当作
+  可调用接口。
 - `base_api.py`：定义 `ApiBase`、API 注册表以及 `register_api()`、`get_api()` 和
   `list_apis()`。每个 API 通过 `functions()` 决定向 code policy 暴露哪些函数，
   `combined_doc()` 则生成可加入模型提示词的函数签名和说明。
@@ -26,7 +31,6 @@ Cap-X 的 `capx/integrations`；其直接依赖的通用工具从 `capx/utils` �
 - `franka/control_reduced_skill_library.py`：在 reduced API 上增加常用几何、抓取和
   操作技能。
 - `franka/libero.py`：面向 LIBERO 任务的完整 Franka API。
-- `franka/libero_privileged.py`：面向 LIBERO 的真值状态接口。
 - `franka/libero_reduced.py`：面向 LIBERO 视觉观察的精简感知、抓取与关节/位姿控制接口。
 - `franka/libero_reduced_skill_library.py`：在 LIBERO reduced API 上增加机器人状态估计、
   抓取状态判断以及可复用操作技能。
@@ -90,7 +94,8 @@ from knowledge.api.franka.libero_osc_reduced_skill_library import (
 )
 ```
 
-这次迁移只内置了 integrations 直接使用的 Cap-X utils。API 仍以 Cap-X 的
-`capx.envs.base.BaseEnv` 和具体 low-level environment 为运行时协议，并依赖相应的
-LIBERO/robosuite、视觉模型、运动规划器及模型服务；把源码放入本目录本身不会自动安装或
-启动这些外部组件。
+本地 Franka/LIBERO API 使用 `knowledge.api.env_protocol.BaseEnv` 结构协议，不再因
+类型接口而 import Cap-X。具体 repair runtime 由 `workflow.research` 提供本地 LIBERO
+adapter，并管理视觉/运动规划服务。API 仍依赖相应的 LIBERO/robosuite、视觉模型和
+运动规划 Python 依赖；`r1pro` 等与 LIBERO repair 无关的可选后端保留各自的运行时
+依赖。

@@ -43,6 +43,8 @@ from workflow.rollout.runner import (  # noqa: E402
     run_evaluation_batch,
 )
 from workflow.rollout.state_provider import (  # noqa: E402
+    RobotInitialStateRandomization,
+    generate_official_robot_states,
     generate_randomized_states,
     resolve_evaluation_initial_states,
 )
@@ -619,7 +621,27 @@ def parse_generator_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--task-id", type=int, required=True)
     parser.add_argument("--count", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--scene-source",
+        choices=("randomized_bddl", "official"),
+        default="randomized_bddl",
+    )
     parser.add_argument("--seed-start", type=int, default=100_000)
+    parser.add_argument("--robot-seed-start", type=int, default=2_000_000)
+    parser.add_argument(
+        "--ee-offset-low",
+        type=float,
+        nargs=3,
+        default=(-0.04, -0.04, -0.02),
+        metavar=("DX", "DY", "DZ"),
+    )
+    parser.add_argument(
+        "--ee-offset-high",
+        type=float,
+        nargs=3,
+        default=(0.04, 0.04, 0.04),
+        metavar=("DX", "DY", "DZ"),
+    )
     parser.add_argument("--wait-steps", type=int, default=10)
     parser.add_argument("--validation-hold-steps", type=int, default=5)
     parser.add_argument("--control-freq", type=int, default=20)
@@ -640,18 +662,30 @@ def parse_generator_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def generator_main(argv: list[str] | None = None) -> int:
     args = parse_generator_args(argv)
-    manifest = generate_randomized_states(
-        output=args.output.expanduser().resolve(),
-        suite_name=args.suite,
-        task_id=args.task_id,
-        count=args.count,
-        seed_start=args.seed_start,
-        wait_steps=args.wait_steps,
-        validation_hold_steps=args.validation_hold_steps,
-        control_freq=args.control_freq,
-        maximum_stabilization_drift=args.maximum_stabilization_drift,
-        max_attempts=args.max_attempts,
+    robot_randomization = RobotInitialStateRandomization(
+        seed_start=args.robot_seed_start,
+        ee_offset_low=tuple(args.ee_offset_low),
+        ee_offset_high=tuple(args.ee_offset_high),
     )
+    common = {
+        "output": args.output.expanduser().resolve(),
+        "suite_name": args.suite,
+        "task_id": args.task_id,
+        "count": args.count,
+        "wait_steps": args.wait_steps,
+        "validation_hold_steps": args.validation_hold_steps,
+        "control_freq": args.control_freq,
+        "maximum_stabilization_drift": args.maximum_stabilization_drift,
+        "robot_randomization": robot_randomization,
+    }
+    if args.scene_source == "official":
+        manifest = generate_official_robot_states(**common)
+    else:
+        manifest = generate_randomized_states(
+            **common,
+            seed_start=args.seed_start,
+            max_attempts=args.max_attempts,
+        )
     print(json.dumps(manifest, indent=2, ensure_ascii=False))
     return 0
 

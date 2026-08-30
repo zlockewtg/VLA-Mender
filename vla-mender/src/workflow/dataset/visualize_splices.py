@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -19,6 +20,17 @@ from .media import decode_embedded_image
 
 
 HEADER_HEIGHT = 48
+
+
+def _source_episode_filename(value: int | str) -> str:
+    """Return a collision-resistant filename component for a manifest identity."""
+
+    if isinstance(value, int) and not isinstance(value, bool):
+        return f"{value:03d}"
+    text = str(value)
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", text).strip("-._") or "source"
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
+    return f"{slug[:64]}-{digest}"
 
 
 def _sha256(path: Path) -> str:
@@ -156,7 +168,7 @@ def render_splice_videos(
             )
             length = len(table)
             stem = (
-                f"episode_{episode_index:03d}_source_{int(source_episode):03d}_"
+                f"episode_{episode_index:03d}_source_{_source_episode_filename(source_episode)}_"
                 f"splice_{splice:03d}"
             )
             full_path = full_dir / f"{stem}_full.mp4"

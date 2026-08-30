@@ -1,0 +1,43 @@
+schema_version: 1
+
+# The all-checkpoint launcher overrides this path for every numeric step.
+checkpoint: /mnt/public/tgy/VLA-Mender/checkpoints/pi0_libero_stove_pan_scene3_quality40/prefix_repair_20hz_h50_lr2e5_4k_v1/500
+config_name: pi0_libero
+openpi_source: /mnt/public/tgy/VLA-Mender/third_party/openpi
+openpi_commit: 15a9616a00943ada6c20a0f158e3adb39df2ccac
+python: /opt/venv/openpi/bin/python
+output_parent: /mnt/public/tgy/VLA-Mender/outputs/stove_pan_scene3_repair_v2_contact_path_review/eval
+
+tasks:
+  - key: stove-pan-scene3
+    suite: libero_90
+    task_id: 21
+
+# LIBERO's 50 official initial states, in their canonical index order.
+initial_states:
+  provider: official
+  count: 50
+  indices: null
+
+evaluation:
+  seed: 7
+  policy_seed_offset: 0
+  trials_per_state: 1
+  control_freq: 20
+  max_steps: 600
+  num_steps_wait: 10
+  action_chunk: 5
+  inference_steps: 5
+  binary_gripper: false
+  gripper_hysteresis_threshold: 0.2
+  compile_mode: none
+
+resources:
+  gpus: [0, 1, 2, 3]
+  num_envs: 4
+
+artifacts:
+  mode: lerobot
+  training_schema_only: true
+  save_images: false
+  image_writer_threads: 8

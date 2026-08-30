@@ -153,6 +153,14 @@ def _path(base: Path, value: Any | None) -> Path | None:
     )
 
 
+def _executable_path(base: Path, value: Any) -> Path:
+    """Return an absolute executable path without resolving virtualenv symlinks."""
+    candidate = Path(str(value)).expanduser()
+    if not candidate.is_absolute():
+        candidate = base / candidate
+    return candidate.absolute()
+
+
 def _slug(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-.") or "task"
 
@@ -573,9 +581,10 @@ def resolve_campaign(args: argparse.Namespace) -> Campaign:
     if args.resume and artifacts["mode"] == "videos_only":
         raise ValueError("videos_only does not support resume")
 
-    python = _path(base, document.get("python", "/opt/venv/openpi/bin/python"))
+    python = _executable_path(
+        base, document.get("python", "/opt/venv/openpi/bin/python")
+    )
     libero_path = _path(base, document.get("libero_config_path"))
-    assert python is not None
     if args.output is not None:
         output = _path(base, args.output)
         assert output is not None

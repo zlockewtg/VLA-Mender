@@ -40,19 +40,33 @@ class ImageSource:
 
 @dataclass(frozen=True)
 class SegmentSource:
-    parquet: Path
+    parquet: Path | None
+    trajectory: Path | None
     images: dict[str, ImageSource]
 
     @classmethod
     def parse(cls, base: Path, value: Mapping[str, Any], label: str) -> "SegmentSource":
-        unknown = set(value) - {"parquet", "images"}
+        unknown = set(value) - {"parquet", "trajectory", "images"}
         if unknown:
             raise ValueError(f"unknown {label} keys: {sorted(unknown)}")
+        parquet = (
+            _resolve(base, value["parquet"], f"{label}.parquet")
+            if value.get("parquet")
+            else None
+        )
+        trajectory = (
+            _resolve(base, value["trajectory"], f"{label}.trajectory")
+            if value.get("trajectory")
+            else None
+        )
+        if (parquet is None) == (trajectory is None):
+            raise ValueError(f"{label} requires exactly one of parquet or trajectory")
         images = value.get("images") or {}
         if not isinstance(images, Mapping):
             raise ValueError(f"{label}.images must be a mapping")
         return cls(
-            parquet=_resolve(base, value.get("parquet"), f"{label}.parquet"),
+            parquet=parquet,
+            trajectory=trajectory,
             images={
                 str(name): ImageSource.parse(base, source, f"{label}.images.{name}")
                 for name, source in images.items()
@@ -76,13 +90,14 @@ class EpisodeSource:
 def _resolve_continuity(base: Path, value: Mapping[str, Any]) -> dict[str, Any]:
     allowed = {
         "reset_descriptor", "attempt_manifest", "result", "reset_state_key",
-        "repair_state_key", "expected_source_python",
+        "repair_state_key", "expected_source_python", "handoff_manifest",
+        "source_job_id",
     }
     unknown = set(value) - allowed
     if unknown:
         raise ValueError(f"unknown continuity keys: {sorted(unknown)}")
     result = dict(value)
-    for key in ("reset_descriptor", "attempt_manifest", "result"):
+    for key in ("reset_descriptor", "attempt_manifest", "result", "handoff_manifest"):
         if key in result:
             result[key] = str(_resolve(base, result[key], f"continuity.{key}"))
     return result

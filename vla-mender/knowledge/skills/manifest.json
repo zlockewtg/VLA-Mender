@@ -2,14 +2,15 @@
   "schema_version": 1,
   "domain": "VLA-Mender",
   "workflow_relative_path": "WORKFLOW.md",
-  "workflow_sha256": "494306317c851f44c0ec048180e48dd45b317ddd605292dfd97144099cdcc219",
-  "skill_count": 5,
+  "workflow_sha256": "8e1bd471670a1d74c5fc6f6b4bc685ede1b54aba18aa1d29c3e55b422a1d8f3c",
+  "skill_count": 6,
   "skills": [
     {
       "id": "vlamender-robot-state-contract",
       "title": "VLA-Mender Robot State Contract",
       "relative_path": "robot-state-contract/SKILL.md",
       "skill_file_sha256": "6904cd248e050138170a6c28eed81cf578b66a58e60a7067ea53d3b798abc265",
+      "scope": "repair_runtime",
       "api_names": ["get_robot_state"]
     },
     {
@@ -17,6 +18,7 @@
       "title": "VLA-Mender Grasp-State Estimation",
       "relative_path": "grasp-state-estimation/SKILL.md",
       "skill_file_sha256": "6226e9a165320d7b83c3c94a326b30616ebb3b39ac7efe55f2048c104d34f027",
+      "scope": "repair_runtime",
       "api_names": ["get_robot_state", "estimate_grasp_state"]
     },
     {
@@ -24,6 +26,7 @@
       "title": "VLA-Mender Guarded Grasp Acquisition",
       "relative_path": "guarded-grasp-acquisition/SKILL.md",
       "skill_file_sha256": "eca84cadc6209778544f60c53005184de30941d1c50d2552a778ff65580a6914",
+      "scope": "repair_runtime",
       "api_names": ["estimate_grasp_state", "grasp_if_unheld"]
     },
     {
@@ -31,6 +34,7 @@
       "title": "VLA-Mender Guarded Release",
       "relative_path": "guarded-release/SKILL.md",
       "skill_file_sha256": "8f6746cddc170dda00136c59049809b85a79f8a593bc864855db26bf14c03acd",
+      "scope": "repair_runtime",
       "api_names": ["estimate_grasp_state", "guarded_open_gripper"]
     },
     {
@@ -38,6 +42,7 @@
       "title": "VLA-Mender Monotonic Place and Release",
       "relative_path": "vlamender-monotonic-place-release/SKILL.md",
       "skill_file_sha256": "3601ec797de58a6e1f8fcb8f2045f9dd1f18b38897eb9a716e4a619971556a50",
+      "scope": "repair_runtime",
       "api_names": [
         "get_robot_state",
         "estimate_grasp_state",
@@ -46,6 +51,14 @@
         "goto_pose",
         "guarded_open_gripper"
       ]
+    },
+    {
+      "id": "vlamender-libero-dataset-alignment",
+      "title": "VLA-Mender LIBERO Dataset Alignment",
+      "relative_path": "vlamender-libero-dataset-alignment/SKILL.md",
+      "skill_file_sha256": "b6998371be56cce1161e600a2efc346e0a34bd472b48416098f660ba3589aa96",
+      "scope": "dataset_pipeline",
+      "api_names": []
     }
   ]
 }

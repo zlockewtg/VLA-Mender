@@ -318,6 +318,10 @@ def _build_cmd(server_config: dict[str, Any], workers: int) -> list[str]:
     merged_extra: dict[str, Any] = {}
     merged_extra.update(reg.get("extra_args", {}))
     merged_extra.update(server_config.get("extra_args", {}))
+    # Tool checkpoints have one repository-local layout. Do not forward stale
+    # environment/YAML-era path overrides to the fixed-path launchers.
+    merged_extra.pop("checkpoint_path", None)
+    merged_extra.pop("checkpoint_dir", None)
 
     # If the server is GPU-required and has a gpu_index, set device to cuda
     gpu_idx = server_config.get("gpu_index")
@@ -325,11 +329,6 @@ def _build_cmd(server_config: dict[str, Any], workers: int) -> list[str]:
         # The device arg should be "cuda" (we control CUDA_VISIBLE_DEVICES
         # externally), but keep any explicit override from config.
         merged_extra.setdefault("device", "cuda")
-
-    if name == "sam3" and os.environ.get("SAM3_CHECKPOINT_PATH"):
-        merged_extra.setdefault("checkpoint_path", os.environ["SAM3_CHECKPOINT_PATH"])
-    if name == "graspnet" and os.environ.get("CONTACT_GRASPNET_CHECKPOINT_DIR"):
-        merged_extra.setdefault("checkpoint_dir", os.environ["CONTACT_GRASPNET_CHECKPOINT_DIR"])
 
     for k, v in merged_extra.items():
         # Convert Python values to CLI-style args: --key value

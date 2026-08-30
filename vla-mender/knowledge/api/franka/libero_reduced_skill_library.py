@@ -9,7 +9,7 @@ import viser.transforms as vtf
 from PIL import Image, ImageDraw
 from scipy.spatial.transform import Rotation as SciRotation
 
-from capx.envs.base import (
+from knowledge.api.env_protocol import (
     BaseEnv,
 )
 from knowledge.api.base_api import ApiBase
@@ -29,19 +29,106 @@ from knowledge.api.utils.camera_utils import obs_get_rgb
 from knowledge.api.utils.depth_utils import depth_color_to_pointcloud, depth_to_pointcloud, depth_to_rgb
 
 
+def _classify_grasp_resume_phase(
+    current_position: np.ndarray,
+    current_quaternion_wxyz: np.ndarray,
+    pregrasp_position: np.ndarray,
+    grasp_position: np.ndarray,
+    grasp_quaternion_wxyz: np.ndarray,
+    *,
+    position_tolerance_m: float,
+    orientation_tolerance_rad: float,
+    contact_ready_tolerance_m: float | None = None,
+) -> dict[str, Any]:
+    """Classify an observed handoff pose without regressing grasp progress.
+
+    A reset-suffix policy can take over after the VLA has already entered the
+    pregrasp-to-contact segment.  Sending that pose back to pregrasp creates an
+    artificial up-down loop.  This classifier uses only public Cartesian state
+    and the observation-derived policy targets to distinguish contact-ready,
+    descent-corridor, and genuinely unapproached states.
+    """
+    current = np.asarray(current_position, dtype=np.float64).reshape(3)
+    pregrasp = np.asarray(pregrasp_position, dtype=np.float64).reshape(3)
+    grasp = np.asarray(grasp_position, dtype=np.float64).reshape(3)
+    current_quaternion = np.asarray(current_quaternion_wxyz, dtype=np.float64).reshape(4)
+    grasp_quaternion = np.asarray(grasp_quaternion_wxyz, dtype=np.float64).reshape(4)
+    if not all(
+        np.all(np.isfinite(value))
+        for value in (current, pregrasp, grasp, current_quaternion, grasp_quaternion)
+    ):
+        raise ValueError("grasp resume inputs must contain finite values")
+    current_quaternion /= max(float(np.linalg.norm(current_quaternion)), 1.0e-12)
+    grasp_quaternion /= max(float(np.linalg.norm(grasp_quaternion)), 1.0e-12)
+    quaternion_dot = float(
+        np.clip(abs(np.dot(current_quaternion, grasp_quaternion)), 0.0, 1.0)
+    )
+    orientation_error = float(2.0 * np.arccos(quaternion_dot))
+    orientation_aligned = orientation_error <= orientation_tolerance_rad
+    pregrasp_error = float(np.linalg.norm(current - pregrasp))
+    grasp_error = float(np.linalg.norm(current - grasp))
+
+    segment = grasp - pregrasp
+    segment_length_squared = float(np.dot(segment, segment))
+    if segment_length_squared <= 1.0e-12:
+        segment_progress = 1.0
+        corridor_error = grasp_error
+    else:
+        segment_progress = float(np.dot(current - pregrasp, segment) / segment_length_squared)
+        projection = pregrasp + np.clip(segment_progress, 0.0, 1.0) * segment
+        corridor_error = float(np.linalg.norm(current - projection))
+
+    if contact_ready_tolerance_m is None:
+        contact_ready_tolerance_m = position_tolerance_m
+    contact_ready = bool(
+        orientation_aligned and grasp_error <= contact_ready_tolerance_m
+    )
+    in_descent_corridor = bool(
+        orientation_aligned
+        and -0.10 <= segment_progress <= 1.15
+        and corridor_error <= position_tolerance_m
+    )
+    resume_phase = (
+        "contact_ready"
+        if contact_ready
+        else "descent_corridor"
+        if in_descent_corridor
+        else "pregrasp_required"
+    )
+    return {
+        "resume_phase": resume_phase,
+        "pregrasp_error_initial_m": pregrasp_error,
+        "grasp_error_initial_m": grasp_error,
+        "orientation_error_initial_rad": orientation_error,
+        "descent_segment_progress": segment_progress,
+        "descent_corridor_error_m": corridor_error,
+        "phase_regression_avoided": resume_phase != "pregrasp_required",
+    }
+
+
 # ------------------------------- Control API ------------------------------
 class FrankaLiberoApiReducedSkillLibrary(FrankaLiberoApiReduced):
     """
     Robot control helpers for Franka.
     """
 
-    _VLAMENDER_XY_RELEASE_LIMIT_M = 0.025
+    _VLAMENDER_XY_RELEASE_LIMIT_M = 0.030
     # Close settling is observation-bounded: stop after two consecutive
     # closed-aperture observations (and at least three control frames), while
     # retaining the audited 12-frame fallback for slow or unavailable state.
     _VLAMENDER_GRASP_CLOSE_MIN_STEPS = 3
     _VLAMENDER_GRASP_CLOSE_STABLE_STEPS = 2
-    _VLAMENDER_GRASP_CLOSE_SETTLE_STEPS = 12
+    _VLAMENDER_GRASP_CLOSE_SETTLE_STEPS = 16
+    # A grasped object normally prevents the fingers from reaching the
+    # library's coarse "closed" aperture.  Detect that contact plateau from
+    # public normalized width, after observing meaningful closure, rather than
+    # appending the full fallback wait to every successful grasp.
+    _VLAMENDER_GRASP_CONTACT_MIN_STEPS = 5
+    _VLAMENDER_GRASP_CONTACT_STABLE_STEPS = 2
+    _VLAMENDER_GRASP_CONTACT_WIDTH_DELTA = 1.5e-3
+    _VLAMENDER_GRASP_CONTACT_MIN_CLOSURE = 0.05
+    _VLAMENDER_GRASP_CONTACT_READY_TOLERANCE_M = 0.006
+    _VLAMENDER_GRIPPER_OPEN_THRESHOLD = 0.85
 
     def __init__(
         self,
@@ -135,7 +222,7 @@ class FrankaLiberoApiReducedSkillLibrary(FrankaLiberoApiReduced):
         width = float(np.clip(raw_width, 0.0, 1.0))
         if width <= 0.15:
             aperture = "closed"
-        elif width >= 0.75:
+        elif width >= self._VLAMENDER_GRIPPER_OPEN_THRESHOLD:
             aperture = "open"
         else:
             aperture = "intermediate"
@@ -334,11 +421,28 @@ class FrankaLiberoApiReducedSkillLibrary(FrankaLiberoApiReduced):
     def _vlamender_open_raw(self) -> None:
         super().open_gripper()
 
+    def _vlamender_goto_grasp_pose(
+        self,
+        position: np.ndarray,
+        quaternion_wxyz: np.ndarray,
+    ) -> None:
+        """Move only forward to the grasp pose on the active controller."""
+        self.goto_pose(position, quaternion_wxyz)
+
     def _vlamender_close_raw(self) -> None:
+        initial_width: float | None = None
+        try:
+            initial_robot = self.get_robot_state(self.get_observation())
+            initial_width = float(initial_robot["gripper_width_normalized"])
+        except Exception:
+            pass
         self._env._set_gripper(0.0)
         closed_streak = 0
+        contact_streak = 0
         executed_steps = 0
         last_width: float | None = None
+        previous_width = initial_width
+        total_closure = 0.0
         reason = "maximum_settle_fallback"
         for _ in range(self._VLAMENDER_GRASP_CLOSE_SETTLE_STEPS):
             self._env._step_once()
@@ -346,26 +450,56 @@ class FrankaLiberoApiReducedSkillLibrary(FrankaLiberoApiReduced):
             try:
                 robot = self.get_robot_state(self.get_observation())
                 last_width = float(robot["gripper_width_normalized"])
+                width_delta = (
+                    float("inf")
+                    if previous_width is None
+                    else abs(last_width - previous_width)
+                )
+                total_closure = (
+                    0.0
+                    if initial_width is None
+                    else max(0.0, initial_width - last_width)
+                )
                 closed_streak = (
                     closed_streak + 1
                     if robot["gripper_aperture_state"] == "closed"
                     else 0
                 )
+                contact_streak = (
+                    contact_streak + 1
+                    if (
+                        robot["gripper_aperture_state"] == "intermediate"
+                        and total_closure >= self._VLAMENDER_GRASP_CONTACT_MIN_CLOSURE
+                        and width_delta <= self._VLAMENDER_GRASP_CONTACT_WIDTH_DELTA
+                    )
+                    else 0
+                )
+                previous_width = last_width
             except Exception:
                 # Observation failure cannot weaken the old conservative
                 # behavior: retain the close command for the full fallback.
                 closed_streak = 0
+                contact_streak = 0
             if (
                 executed_steps >= self._VLAMENDER_GRASP_CLOSE_MIN_STEPS
                 and closed_streak >= self._VLAMENDER_GRASP_CLOSE_STABLE_STEPS
             ):
                 reason = "observed_closed_aperture_stable"
                 break
+            if (
+                executed_steps >= self._VLAMENDER_GRASP_CONTACT_MIN_STEPS
+                and contact_streak >= self._VLAMENDER_GRASP_CONTACT_STABLE_STEPS
+            ):
+                reason = "observed_contact_width_stable"
+                break
         self._vlamender_last_close_audit = {
             "executed_steps": executed_steps,
             "maximum_steps": self._VLAMENDER_GRASP_CLOSE_SETTLE_STEPS,
             "closed_streak": closed_streak,
+            "contact_streak": contact_streak,
+            "initial_gripper_width_normalized": initial_width,
             "last_gripper_width_normalized": last_width,
+            "total_closure_normalized": total_closure,
             "reason": reason,
         }
         print("[vlamender_close_settle] " + repr(self._vlamender_last_close_audit), flush=True)
@@ -604,6 +738,7 @@ class FrankaLiberoApiReducedSkillLibrary(FrankaLiberoApiReduced):
         quaternion /= quaternion_norm
         pregrasp_motion_skipped = False
         grasp_motion_skipped = False
+        resume_audit: dict[str, Any] = {"resume_phase": "unclassified"}
         prompts = object_prompts if isinstance(object_prompts, (list, tuple)) else [object_prompts]
         handle_alignment = any("handle" in str(prompt).casefold() for prompt in prompts)
         previous_handle_alignment = bool(
@@ -612,9 +747,6 @@ class FrankaLiberoApiReducedSkillLibrary(FrankaLiberoApiReduced):
         if handle_alignment and hasattr(self, "_handle_alignment_active"):
             self._handle_alignment_active = True
         try:
-            if before["gripper_aperture_state"] != "open":
-                self._vlamender_open_raw()
-
             current_observation = self.get_observation()
             current_state = self.get_robot_state(current_observation)
             current_position = np.asarray(
@@ -623,15 +755,30 @@ class FrankaLiberoApiReducedSkillLibrary(FrankaLiberoApiReduced):
             current_quaternion = np.asarray(
                 current_state["eef_quaternion_wxyz"], dtype=np.float64
             )
-            pregrasp_error = float(np.linalg.norm(current_position - pregrasp))
-            quaternion_dot = float(
-                np.clip(abs(np.dot(current_quaternion, quaternion)), 0.0, 1.0)
+            resume_audit = _classify_grasp_resume_phase(
+                current_position,
+                current_quaternion,
+                pregrasp,
+                grasp,
+                quaternion,
+                position_tolerance_m=self._GOTO_POSITION_TOLERANCE_M,
+                orientation_tolerance_rad=self._GOTO_ORIENTATION_TOLERANCE_RAD,
+                contact_ready_tolerance_m=(
+                    self._VLAMENDER_GRASP_CONTACT_READY_TOLERANCE_M
+                ),
             )
-            pregrasp_orientation_error = float(2.0 * np.arccos(quaternion_dot))
-            pregrasp_motion_skipped = bool(
-                pregrasp_error <= self._GOTO_POSITION_TOLERANCE_M
-                and pregrasp_orientation_error <= self._GOTO_ORIENTATION_TOLERANCE_RAD
-            )
+            pregrasp_motion_skipped = resume_audit["resume_phase"] != "pregrasp_required"
+            grasp_motion_skipped = resume_audit["resume_phase"] == "contact_ready"
+            print("[vlamender_grasp_resume] " + repr(resume_audit), flush=True)
+
+            # Preserve partial closure and contact at a progressed handoff.
+            # Opening here would itself erase VLA progress before the repair
+            # policy gets a chance to continue it.
+            if (
+                resume_audit["resume_phase"] == "pregrasp_required"
+                and before["gripper_aperture_state"] != "open"
+            ):
+                self._vlamender_open_raw()
             if not pregrasp_motion_skipped:
                 self.goto_pose(pregrasp, quaternion)
             # Re-read the public robot pose after the optional pregrasp move.
@@ -658,11 +805,14 @@ class FrankaLiberoApiReducedSkillLibrary(FrankaLiberoApiReduced):
                 2.0 * np.arccos(grasp_quaternion_dot)
             )
             grasp_motion_skipped = bool(
-                grasp_position_error <= self._GOTO_POSITION_TOLERANCE_M
-                and grasp_orientation_error <= self._GOTO_ORIENTATION_TOLERANCE_RAD
+                grasp_motion_skipped
+                or (
+                    grasp_position_error <= self._GOTO_POSITION_TOLERANCE_M
+                    and grasp_orientation_error <= self._GOTO_ORIENTATION_TOLERANCE_RAD
+                )
             )
             if not grasp_motion_skipped:
-                self.goto_pose(grasp, quaternion)
+                self._vlamender_goto_grasp_pose(grasp, quaternion)
             self._vlamender_close_raw()
         except (RuntimeError, ValueError) as exc:
             return {
@@ -671,6 +821,7 @@ class FrankaLiberoApiReducedSkillLibrary(FrankaLiberoApiReduced):
                 "failure_reason": str(exc),
                 "pregrasp_motion_skipped": pregrasp_motion_skipped,
                 "grasp_motion_skipped": grasp_motion_skipped,
+                "resume_audit": resume_audit,
                 "grasp_state_before": before,
             }
         finally:
@@ -684,6 +835,8 @@ class FrankaLiberoApiReducedSkillLibrary(FrankaLiberoApiReduced):
             "executed": True,
             "pregrasp_motion_skipped": pregrasp_motion_skipped,
             "grasp_motion_skipped": grasp_motion_skipped,
+            "resume_audit": resume_audit,
+            "close_audit": dict(getattr(self, "_vlamender_last_close_audit", {})),
             "grasp_state_before": before,
             "grasp_state_after": after,
         }

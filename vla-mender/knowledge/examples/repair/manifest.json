@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "catalog_type": "local_verified_repair",
+  "workflow_relative_path": "WORKFLOW.md",
+  "workflow_sha256": "7f27a90681b7c348df1a30f0a18a38a86251f696ee4421b9168aca330bfb6497",
+  "strategy_count": 2,
+  "strategies": [
+    {
+      "id": "libero90-task21-stove-pan",
+      "label": "Turn on the stove and put the frying pan on it (local best repair parent)",
+      "domain": "LIBERO",
+      "group": "Local repair winners",
+      "program_role": "verified_repair_parent",
+      "source_kind": "local_repair_campaign",
+      "relative_path": "programs/libero90_task21_stove_pan_best_observed.py",
+      "strategy_relative_path": "libero90_task21_stove_pan.md",
+      "sha256": "6b82861de4f51d6a551ba6f9e8584d000d7c743d0dc6491512e53d343d156315",
+      "bytes": 37146,
+      "keywords": [
+        "frying",
+        "pan",
+        "stove",
+        "turn"
+      ],
+      "api_names": [
+        "close_gripper",
+        "commit_target_mask",
+        "decompose_transform",
+        "estimate_grasp_state",
+        "get_observation",
+        "get_robot_state",
+        "goto_pose_osc",
+        "grasp_if_unheld",
+        "ground_placement_target",
+        "guarded_open_gripper",
+        "mask_to_world_points",
+        "open_gripper",
+        "plan_grasp",
+        "segment_sam3_text_prompt",
+        "select_top_down_grasp"
+      ],
+      "task": {
+        "suite": "libero_90",
+        "task_id": 21,
+        "language": "turn on the stove and put the frying pan on it",
+        "task_key": "stove_pan_scene3_pre_repair_libero_90_task21"
+      },
+      "failure_mode": {
+        "ids": [
+          "FM-01"
+        ],
+        "phase": "post-stove transition / pan grasp acquisition",
+        "diagnosis": "stove activation is followed by no effective pan pickup"
+      },
+      "status": "best_observed_partial",
+      "source_program": {
+        "path": "/mnt/public/tgy/VLA-Mender/outputs/stove_pan_scene3_repair/program_store/6b82861de4f51d6a551ba6f9e8584d000d7c743d0dc6491512e53d343d156315/repair_program.py",
+        "sha256": "6b82861de4f51d6a551ba6f9e8584d000d7c743d0dc6491512e53d343d156315"
+      },
+      "evidence": [
+        {
+          "path": "/mnt/public/tgy/VLA-Mender/outputs/stove_pan_scene3_repair/fm01_validation_summary.json",
+          "protocol": "30-seed validation batch",
+          "successes": 21,
+          "episodes": 30
+        },
+        {
+          "path": "/mnt/public/tgy/VLA-Mender/outputs/stove_pan_scene3_repair/fm01_debug_summary.json",
+          "protocol": "20-seed debug subset",
+          "successes": 18,
+          "episodes": 20
+        }
+      ],
+      "caveat": "The v2 campaign has prepared inputs but no newer completed repair result. This program is a useful parent, not a fully generalized solution."
+    },
+    {
+      "id": "libero-goal-task0-open-middle-drawer",
+      "label": "Open the middle drawer of the cabinet (local best repair parent)",
+      "domain": "LIBERO",
+      "group": "Local repair winners",
+      "program_role": "verified_repair_parent",
+      "source_kind": "local_repair_campaign",
+      "relative_path": "programs/libero_goal_task0_open_middle_drawer_align70.py",
+      "strategy_relative_path": "libero_goal_task0_open_middle_drawer.md",
+      "sha256": "ea211e89a43df4b0faad728bf87a3ce2ea4294fd382934a5ab10d6dec5c87555",
+      "bytes": 15992,
+      "keywords": [
+        "cabinet",
+        "drawer",
+        "middle",
+        "open"
+      ],
+      "api_names": [
+        "commit_target_mask",
+        "get_observation",
+        "get_robot_state",
+        "goto_pose_osc",
+        "grasp_if_unheld",
+        "mask_to_world_points",
+        "rotation_matrix_to_quaternion",
+        "segment_sam3_text_prompt"
+      ],
+      "task": {
+        "suite": "libero_goal",
+        "task_id": 0,
+        "language": "open the middle drawer of the cabinet",
+        "task_key": "libero_goal_task000_randomized50_20260810T052115Z"
+      },
+      "failure_mode": {
+        "ids": [
+          "FM-01",
+          "FM-02",
+          "FM-03",
+          "FM-04"
+        ],
+        "phase": "success-pose-aligned middle-handle approach, acquisition, and pull"
+      },
+      "status": "verified_on_seen_repair_set",
+      "source_program": {
+        "path": "/mnt/public/tgy/capx-aspire/aspire/vla_mender/policies/task0_verified/open_middle_drawer_align70_v1.py",
+        "sha256": "ea211e89a43df4b0faad728bf87a3ce2ea4294fd382934a5ab10d6dec5c87555"
+      },
+      "evidence": [
+        {
+          "path": "/mnt/public/tgy/data/libero_eval/libero_goal_task000_randomized50_20260810T052115Z/failure_diagnosis/repair_observation_only/batch_numeric_strict79_repair46_align70_v1/batch_summary.json",
+          "protocol": "same 46 diagnosed repair reset states",
+          "successes": 46,
+          "episodes": 46
+        },
+        {
+          "path": "/mnt/public/tgy/data/libero_eval/open_middle_drawer_1000/summary.json",
+          "protocol": "official",
+          "successes": 48,
+          "episodes": 50
+        }
+      ],
+      "caveat": "46/46 is seen-reset repair coverage, not unseen generalization. The 48/50 result belongs to a trained checkpoint using a curated 30-episode prefix-plus-repair dataset."
+    }
+  ]
+}

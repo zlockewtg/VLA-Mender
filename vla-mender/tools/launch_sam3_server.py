@@ -3,7 +3,6 @@ import base64
 import functools
 import io
 import logging
-from pathlib import Path
 from typing import Any, List, Tuple
 
 import numpy as np
@@ -14,6 +13,7 @@ from fastapi import FastAPI, HTTPException
 from PIL import Image
 from pydantic import BaseModel
 
+from checkpoint_paths import SAM3_CHECKPOINT_PATH
 from sam3.model.sam3_image_processor import Sam3Processor
 from sam3.model_builder import build_sam3_image_model
 
@@ -180,8 +180,8 @@ async def segment(req: SegmentRequest):
     try:
         return await _run_on_gpu(_do_segment, pil_image, req.text_prompt)
     except Exception as e:
-        logger.error(f"Inference failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Inference failed: {e}")
+        logger.exception("SAM3 text-prompt inference failed")
+        raise HTTPException(status_code=500, detail=f"Inference failed: {e}") from e
 
 
 def _do_segment_point(pil_image: Image.Image, point_coords_tuple: tuple[float, float]):
@@ -239,43 +239,17 @@ async def segment_point(req: PointPromptRequest):
     try:
         return await _run_on_gpu(_do_segment_point, pil_image, req.point_coords)
     except Exception as e:
-        logger.error(f"Point prompt inference failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Point prompt inference failed: {e}")
-
-
-def _resolve_checkpoint_path(checkpoint_path: str) -> Path:
-    """Resolve either a SAM3 checkpoint file or a Hugging Face cache repo."""
-    path = Path(checkpoint_path).expanduser()
-    if path.is_file():
-        return path.resolve()
-
-    if path.is_dir():
-        revision = ""
-        main_ref = path / "refs" / "main"
-        if main_ref.is_file():
-            revision = main_ref.read_text().strip()
-
-        candidates = []
-        if revision:
-            candidates.append(path / "snapshots" / revision / "sam3.pt")
-        candidates.extend(sorted((path / "snapshots").glob("*/sam3.pt")))
-        candidates.append(path / "sam3.pt")
-
-        for candidate in candidates:
-            if candidate.is_file():
-                return candidate.resolve()
-
-    raise FileNotFoundError(
-        f"SAM3 checkpoint not found at {path}. Expected a sam3.pt file or "
-        "a Hugging Face models--facebook--sam3 cache directory."
-    )
+        logger.exception("SAM3 point-prompt inference failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Point prompt inference failed: {e}",
+        ) from e
 
 
 def main(
     device: str = "cuda",
     port: int = 8114,
     host: str = "127.0.0.1",
-    checkpoint_path: str | None = None,
 ):
     global _MODEL, _PROCESSOR, _DEVICE
 
@@ -295,16 +269,15 @@ def main(
 
     logger.info("Loading SAM3 model...")
     try:
-        resolved_checkpoint = (
-            _resolve_checkpoint_path(checkpoint_path)
-            if checkpoint_path is not None
-            else None
-        )
-        if resolved_checkpoint is not None:
-            logger.info("Loading SAM3 checkpoint from %s", resolved_checkpoint)
+        if not SAM3_CHECKPOINT_PATH.is_file():
+            raise FileNotFoundError(
+                f"Repository-local SAM3 checkpoint not found: {SAM3_CHECKPOINT_PATH}; "
+                "run scripts/bootstrap_environment.sh"
+            )
+        logger.info("Loading SAM3 checkpoint from %s", SAM3_CHECKPOINT_PATH)
         _MODEL = build_sam3_image_model(
-            checkpoint_path=str(resolved_checkpoint) if resolved_checkpoint else None,
-            load_from_HF=resolved_checkpoint is None,
+            checkpoint_path=str(SAM3_CHECKPOINT_PATH),
+            load_from_HF=False,
             enable_inst_interactivity=True,
         )
     except Exception as e:

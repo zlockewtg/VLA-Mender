@@ -5,7 +5,6 @@ import io
 import logging
 import os
 import sys
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -17,6 +16,11 @@ import yaml
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from checkpoint_paths import (
+    CONTACT_GRASPNET_CHECKPOINT_DIR,
+    CONTACT_GRASPNET_CONFIG_PATH,
+    CONTACT_GRASPNET_ROOT,
+)
 from device_utils import activate_cuda_device
 from graspnet_utils import (
     sample_cone_viewpoints_evenly,
@@ -102,6 +106,43 @@ def load_contact_graspnet_config(
     global_config["DATA"]["classes"] = None
 
     return global_config
+
+
+def build_grasp_estimator(
+    global_config: dict[str, Any],
+    model_checkpoint_dir: str,
+    active_device: torch.device,
+    *,
+    estimator_cls: Any,
+    checkpoint_io_cls: Any,
+) -> Any:
+    """Build a Contact-GraspNet estimator and load its checkpoint strictly."""
+    logger.info("Building GraspNet model...")
+    estimator = estimator_cls(global_config)
+
+    logger.info("Loading weights from %s", model_checkpoint_dir)
+    checkpoint_path = os.path.join(model_checkpoint_dir, "model.pt")
+    if not os.path.isfile(checkpoint_path):
+        raise FileNotFoundError(
+            f"Contact-GraspNet checkpoint not found: {checkpoint_path}"
+        )
+
+    checkpoint_io = checkpoint_io_cls(
+        checkpoint_dir=model_checkpoint_dir,
+        model=estimator.model,
+    )
+    try:
+        state_dict = torch.load(
+            checkpoint_path,
+            map_location=active_device,
+            weights_only=False,
+        )
+        checkpoint_io.parse_state_dict(state_dict)
+    except Exception:
+        logger.exception("Failed to load Contact-GraspNet checkpoint")
+        raise
+
+    return estimator
 
 
 # --- Serialization Helpers ---
@@ -518,7 +559,7 @@ async def plan_evenly_endpoint(req: PlanEvenlyRequest):
         )
 
 
-def main(device: str = "cuda", port: int = 8115, host: str = "127.0.0.1", checkpoint_dir: str | None = None):
+def main(device: str = "cuda", port: int = 8115, host: str = "127.0.0.1"):
     global _GRASP_ESTIMATOR, _DEVICE
     active_device = activate_cuda_device(device, service_name="Contact-GraspNet")
     _DEVICE = str(active_device)
@@ -526,11 +567,7 @@ def main(device: str = "cuda", port: int = 8115, host: str = "127.0.0.1", checkp
 
     # --- Setup Paths & Import ---
 
-    here = os.path.dirname(os.path.abspath(__file__))
-    # Assume capx/serving -> go up to capx -> go to third_party
-    vendor_root = os.path.normpath(
-        os.path.join(here, "..", "..", "third_party", "contact_graspnet_pytorch")
-    )
+    vendor_root = os.fspath(CONTACT_GRASPNET_ROOT)
 
     pointnet_root = os.path.join(vendor_root, "Pointnet_Pointnet2_pytorch")
     if pointnet_root not in sys.path:
@@ -546,38 +583,25 @@ def main(device: str = "cuda", port: int = 8115, host: str = "127.0.0.1", checkp
         )
         raise
 
-    model_checkpoint_dir = os.path.abspath(checkpoint_dir or os.environ.get("CONTACT_GRASPNET_CHECKPOINT_DIR", os.path.join(vendor_root, "checkpoints/contact_graspnet/checkpoints")))
-    config_dir = Path(model_checkpoint_dir).parent
-    config_path = config_dir / "config.yaml"
-    if not config_path.is_file():
+    model_checkpoint_dir = os.fspath(CONTACT_GRASPNET_CHECKPOINT_DIR)
+    config_dir = CONTACT_GRASPNET_CONFIG_PATH.parent
+    if not CONTACT_GRASPNET_CONFIG_PATH.is_file():
         raise FileNotFoundError(
-            f"Contact-GraspNet config not found: {config_path}; "
-            "set CONTACT_GRASPNET_CHECKPOINT_DIR"
+            f"Repository-local Contact-GraspNet config not found: "
+            f"{CONTACT_GRASPNET_CONFIG_PATH}; run scripts/bootstrap_environment.sh"
         )
 
     logger.info("Loading GraspNet config from %s", config_dir)
     global_config = load_contact_graspnet_config(config_dir)
 
     with torch.cuda.device(active_device):
-        logger.info("Building GraspNet model...")
-        _GRASP_ESTIMATOR = GraspEstimator(global_config, device=active_device)
-
-        logger.info(f"Loading weights from {model_checkpoint_dir}")
-        checkpoint_io = CheckpointIO(
-            checkpoint_dir=model_checkpoint_dir, model=_GRASP_ESTIMATOR.model
+        _GRASP_ESTIMATOR = build_grasp_estimator(
+            global_config,
+            model_checkpoint_dir,
+            active_device,
+            estimator_cls=GraspEstimator,
+            checkpoint_io_cls=CheckpointIO,
         )
-        checkpoint_path = os.path.join(model_checkpoint_dir, "model.pt")
-        try:
-            if not os.path.exists(checkpoint_path):
-                raise FileExistsError(checkpoint_path)
-            state_dict = torch.load(
-                checkpoint_path, map_location=active_device, weights_only=False
-            )
-            checkpoint_io.parse_state_dict(state_dict)
-        except FileExistsError:
-            raise FileNotFoundError(f"Contact-GraspNet checkpoint not found: {checkpoint_path}")
-        except Exception as e:
-            logger.error(f"Error loading checkpoint: {e}")
 
     logger.info(f"GraspNet Service initialized on {active_device}. Starting Uvicorn...")
     uvicorn.run(app, host=host, port=port)

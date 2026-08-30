@@ -1,0 +1,339 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1150" viewBox="0 0 1800 1150" role="img" aria-labelledby="title desc">
+  <title id="title">VLA-Mender: Evidence-Driven Closed-Loop Repair for VLA Policies</title>
+  <desc id="desc">A publication-style overview of VLA-Mender. The repair panel distinguishes the prompt-mandated task-start knowledge review, the initial failure-mode candidate, the evidence-gated refinement loop, and the campaign-local current experience slot.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#26364a"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#0072B2"/>
+    </marker>
+    <marker id="arrow-magenta" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#B64E91"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#D48B00"/>
+    </marker>
+    <style>
+      text { font-family: Arial, Helvetica, "Noto Sans", sans-serif; fill: #172033; }
+      .title { font-size: 29px; font-weight: 700; }
+      .subtitle { font-size: 14px; fill: #566477; }
+      .panel-label { font-size: 13px; font-weight: 700; fill: #ffffff; }
+      .panel-title { font-size: 18px; font-weight: 700; }
+      .stage-title { font-size: 14px; font-weight: 700; }
+      .stage-text { font-size: 11px; fill: #4e5c70; }
+      .module-title { font-size: 13px; font-weight: 700; }
+      .module-text { font-size: 11px; fill: #4e5c70; }
+      .small { font-size: 10px; fill: #667387; }
+      .label { font-size: 10px; font-weight: 700; fill: #566477; letter-spacing: .4px; }
+      .artifact { font-size: 10.5px; font-weight: 700; fill: #29384d; }
+      .code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 9.8px; fill: #425168; }
+      .box { fill: #ffffff; stroke: #9eaaba; stroke-width: 1.15; }
+      .flow { fill: none; stroke: #26364a; stroke-width: 1.8; marker-end: url(#arrow); }
+      .thin-flow { fill: none; stroke: #536174; stroke-width: 1.4; marker-end: url(#arrow); }
+      .control { fill: none; stroke: #68768a; stroke-width: 1.4; stroke-dasharray: 5 4; marker-end: url(#arrow); }
+      .feedback { fill: none; stroke: #0072B2; stroke-width: 2; stroke-dasharray: 8 5; marker-end: url(#arrow-blue); }
+      .repair-flow { fill: none; stroke: #B64E91; stroke-width: 1.9; marker-end: url(#arrow-magenta); }
+      .repair-feedback { fill: none; stroke: #B64E91; stroke-width: 1.7; stroke-dasharray: 6 4; marker-end: url(#arrow-magenta); }
+      .knowledge-flow { fill: none; stroke: #D48B00; stroke-width: 1.8; marker-end: url(#arrow-orange); }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1150" fill="#ffffff"/>
+  <text x="48" y="42" class="title">VLA-Mender: Evidence-Driven Closed-Loop Repair for VLA Policies</text>
+  <text x="48" y="67" class="subtitle">Verified interventions expose recoverable failures; task-parallel agents convert them into reusable repair experience and targeted training data.</text>
+  <line x1="48" y1="84" x2="1752" y2="84" stroke="#c7d0db"/>
+
+  <!-- Panel (a): End-to-end method -->
+  <rect x="48" y="105" width="1704" height="248" rx="8" fill="#f8fafc" stroke="#9eaaba"/>
+  <rect x="48" y="105" width="35" height="27" rx="5" fill="#26364a"/>
+  <text x="60" y="124" class="panel-label">a</text>
+  <text x="96" y="125" class="panel-title">End-to-end repair-to-learning loop</text>
+
+  <!-- Inputs -->
+  <rect x="75" y="151" width="245" height="42" rx="5" fill="#ffffff" stroke="#aab5c4"/>
+  <text x="91" y="169" class="module-title">VLA policy + benchmark tasks</text>
+  <text x="91" y="185" class="small">checkpoint · initial states · reproducible seeds</text>
+  <path d="M197 193 L197 211" class="thin-flow"/>
+
+  <!-- Stage 1 -->
+  <rect x="75" y="213" width="245" height="94" rx="7" fill="#eef7fc" stroke="#5da5d0"/>
+  <rect x="75" y="213" width="8" height="94" rx="4" fill="#0072B2"/>
+  <text x="99" y="239" class="stage-title">1. Failure discovery</text>
+  <text x="99" y="260" class="stage-text">Shared LIBERO rollout semantics</text>
+  <text x="99" y="279" class="stage-text">states · actions · wide/wrist videos</text>
+  <text x="99" y="297" class="artifact">Baseline evidence bank</text>
+
+  <path d="M320 260 L356 260" class="flow"/>
+
+  <!-- Stage 2 -->
+  <rect x="358" y="213" width="245" height="94" rx="7" fill="#fff8e8" stroke="#d6a943"/>
+  <rect x="358" y="213" width="8" height="94" rx="4" fill="#E69F00"/>
+  <text x="382" y="239" class="stage-title">2. Failure diagnosis</text>
+  <text x="382" y="260" class="stage-text">Observation-only agent evidence</text>
+  <text x="382" y="279" class="stage-text">mode · causal frame · recovery window</text>
+  <text x="382" y="297" class="artifact">Structured failure modes</text>
+
+  <path d="M603 260 L639 260" class="flow"/>
+
+  <!-- Stage 3 -->
+  <rect x="641" y="213" width="245" height="94" rx="7" fill="#fff8e8" stroke="#d6a943"/>
+  <rect x="641" y="213" width="8" height="94" rx="4" fill="#E69F00"/>
+  <text x="665" y="239" class="stage-title">3. Verified intervention</text>
+  <text x="665" y="260" class="stage-text">Prefix replay + state/image checks</text>
+  <text x="665" y="279" class="stage-text">exact controller-compatible reset</text>
+  <text x="665" y="297" class="artifact">Repair handoff / reset bank</text>
+
+  <path d="M886 260 L922 260" class="flow"/>
+
+  <!-- Stage 4: highlighted core -->
+  <rect x="924" y="199" width="300" height="122" rx="8" fill="#fbf0f8" stroke="#B64E91" stroke-width="1.7"/>
+  <rect x="924" y="199" width="9" height="122" rx="4" fill="#B64E91"/>
+  <text x="950" y="228" class="stage-title">4. Task-parallel agentic repair</text>
+  <text x="950" y="251" class="stage-text">Knowledge review precedes the first candidate</text>
+  <text x="950" y="272" class="stage-text">One agent per task; persistent state per FM</text>
+  <text x="950" y="293" class="stage-text">Evidence-gated search + current experience slot</text>
+  <text x="950" y="312" class="artifact">Verified repair trajectories</text>
+
+  <path d="M1224 260 L1260 260" class="flow"/>
+
+  <!-- Stage 5 -->
+  <rect x="1262" y="213" width="245" height="94" rx="7" fill="#edf8f3" stroke="#61ab93"/>
+  <rect x="1262" y="213" width="8" height="94" rx="4" fill="#009E73"/>
+  <text x="1286" y="239" class="stage-title">5. Repair-to-learning</text>
+  <text x="1286" y="260" class="stage-text">VLA prefix + retained repair suffix</text>
+  <text x="1286" y="279" class="stage-text">transition-aware OpenPI post-training</text>
+  <text x="1286" y="297" class="artifact">Updated VLA checkpoint</text>
+
+  <path d="M1507 260 L1543 260" class="flow"/>
+
+  <!-- Re-eval -->
+  <rect x="1545" y="213" width="180" height="94" rx="7" fill="#eef7fc" stroke="#5da5d0"/>
+  <text x="1563" y="239" class="stage-title">Re-evaluation</text>
+  <text x="1563" y="260" class="stage-text">Same evaluator</text>
+  <text x="1563" y="279" class="stage-text">New failure distribution</text>
+  <text x="1563" y="297" class="artifact">Next cycle</text>
+
+  <path d="M1635 213 C1635 159 1492 151 1392 151 L364 151 C338 151 320 170 320 196" class="feedback"/>
+  <text x="839" y="143" class="small" fill="#0072B2">updated policy is evaluated under the same reproducible protocol</text>
+
+  <!-- Panel (b): Prompt-faithful repair design -->
+  <rect x="48" y="379" width="1704" height="623" rx="8" fill="#ffffff" stroke="#B64E91" stroke-width="1.35"/>
+  <rect x="48" y="379" width="35" height="27" rx="5" fill="#B64E91"/>
+  <text x="60" y="398" class="panel-label">b</text>
+  <text x="96" y="399" class="panel-title">Core repair design: prompt-grounded initialization followed by evidence-gated failure-mode research</text>
+  <text x="1727" y="399" text-anchor="end" class="small">Parallel across tasks; persistent and independent across failure modes.</text>
+
+  <!-- Campaign orchestration -->
+  <rect x="75" y="430" width="220" height="72" rx="7" fill="#f7f9fb" stroke="#9eaaba"/>
+  <text x="94" y="455" class="module-title">RepairCampaign</text>
+  <text x="94" y="475" class="module-text">task/GPU leases · agent slots</text>
+  <text x="94" y="493" class="code">parallel_tasks × GPU groups</text>
+
+  <path d="M295 466 L323 466" class="control"/>
+
+  <!-- Parallel task agents -->
+  <rect x="325" y="425" width="220" height="80" rx="7" fill="#fbf0f8" stroke="#c986b5"/>
+  <circle cx="350" cy="451" r="12" fill="#B64E91"/>
+  <text x="346" y="455" class="panel-label">A</text>
+  <text x="372" y="451" class="module-title">Agent → Task A</text>
+  <text x="344" y="477" class="module-text">exclusive TaskSession + GPU group</text>
+  <text x="344" y="495" class="small">one owner; multiple FM states</text>
+
+  <rect x="570" y="425" width="220" height="80" rx="7" fill="#fbf0f8" stroke="#c986b5"/>
+  <circle cx="595" cy="451" r="12" fill="#B64E91"/>
+  <text x="591" y="455" class="panel-label">B</text>
+  <text x="617" y="451" class="module-title">Agent → Task B</text>
+  <text x="589" y="477" class="module-text">exclusive TaskSession + GPU group</text>
+  <text x="589" y="495" class="small">same protocol; independent state</text>
+
+  <rect x="815" y="425" width="220" height="80" rx="7" fill="#fbf0f8" stroke="#c986b5"/>
+  <circle cx="840" cy="451" r="12" fill="#B64E91"/>
+  <text x="836" y="455" class="panel-label">N</text>
+  <text x="862" y="451" class="module-title">Agent → Task N</text>
+  <text x="834" y="477" class="module-text">exclusive TaskSession + GPU group</text>
+  <text x="834" y="495" class="small">queued when agent slots are full</text>
+
+  <line x1="435" y1="519" x2="925" y2="519" stroke="#9d6b8c" stroke-width="1.2"/>
+  <path d="M435 505 L435 519" stroke="#9d6b8c" stroke-width="1.2"/>
+  <path d="M680 505 L680 519" stroke="#9d6b8c" stroke-width="1.2"/>
+  <path d="M925 505 L925 519" stroke="#9d6b8c" stroke-width="1.2"/>
+
+  <!-- Mandatory task-start knowledge review -->
+  <rect x="325" y="540" width="1125" height="93" rx="8" fill="#fff8e8" stroke="#D48B00" stroke-width="1.45"/>
+  <rect x="325" y="540" width="10" height="93" rx="4" fill="#E69F00"/>
+  <text x="351" y="561" class="label" fill="#9A6500">PROMPT-MANDATED · BEFORE ANY CANDIDATE OR ROLLOUT</text>
+  <text x="351" y="582" class="module-title">Task-start knowledge review</text>
+  <text x="351" y="602" class="module-text">Decompose observable phases; identify required perception, action, control, and current failure mechanism.</text>
+  <line x1="730" y1="566" x2="730" y2="618" stroke="#dfc88e"/>
+  <text x="750" y="582" class="artifact">Search the full relevant code space</text>
+  <text x="750" y="602" class="small">examples + skills + API mapping (`_api_for`, `functions()`) + implementations</text>
+  <text x="750" y="619" class="small">aspire/repair catalogs · SKILL.md · exposed functions only; no private state</text>
+  <line x1="1090" y1="566" x2="1090" y2="623" stroke="#dfc88e"/>
+  <text x="1110" y="582" class="artifact">Persist analysis</text>
+  <text x="1110" y="602" class="code">task_start_knowledge_review.json</text>
+  <text x="1110" y="619" class="small">analysis · checklist · scopes; refreshable, not a runtime gate/provenance</text>
+  <path d="M680 519 L680 538" class="knowledge-flow"/>
+
+  <!-- Shared execution substrate -->
+  <rect x="1478" y="425" width="247" height="208" rx="8" fill="#f7f9fb" stroke="#9eaaba"/>
+  <text x="1497" y="451" class="module-title">Shared execution substrate</text>
+  <text x="1497" y="476" class="artifact">Exact verified resets</text>
+  <text x="1497" y="498" class="artifact">GPU-local worker pools</text>
+  <text x="1497" y="520" class="artifact">Reduced observation/control API</text>
+  <text x="1497" y="542" class="artifact">SAM3 · GraspNet · PyRoKi</text>
+  <line x1="1497" y1="557" x2="1706" y2="557" stroke="#c7d0db"/>
+  <text x="1497" y="579" class="small">Runtime executes candidates.</text>
+  <text x="1497" y="596" class="small">External evaluator owns success.</text>
+  <text x="1497" y="613" class="small">Agent evidence never self-certifies.</text>
+
+  <!-- Current experience slot -->
+  <rect x="75" y="661" width="240" height="283" rx="8" fill="#eef7fc" stroke="#5da5d0"/>
+  <text x="94" y="687" class="module-title">Current experience slot</text>
+  <text x="94" y="708" class="module-text">Exactly one per (task, FM)</text>
+  <text x="94" y="725" class="code">output/experience</text>
+  <line x1="94" y1="738" x2="296" y2="738" stroke="#b8c7d4"/>
+  <text x="94" y="762" class="artifact">Global baseline</text>
+  <text x="94" y="783" class="artifact">Seed → candidate portfolio</text>
+  <text x="94" y="804" class="artifact">Optional reusable skills</text>
+  <text x="94" y="825" class="artifact">Provenance + coverage</text>
+  <line x1="94" y1="840" x2="296" y2="840" stroke="#b8c7d4"/>
+  <text x="94" y="861" class="small">READ · choose a primary parent</text>
+  <text x="94" y="880" class="small">WRITE · promote_best replaces baseline</text>
+  <text x="94" y="899" class="small">WRITE · promote_seed_solutions adds wins</text>
+  <text x="94" y="923" class="small">Targeted reuse creates no duplicate candidate.</text>
+  <text x="94" y="938" class="small">Older versions remain candidate history.</text>
+
+  <!-- Persistent failure-mode research state -->
+  <rect x="340" y="661" width="1110" height="283" rx="8" fill="#fcf8fb" stroke="#c986b5"/>
+  <text x="360" y="685" class="label">PERSISTENT RESEARCH STATE · ONE INSTANCE PER (TASK, FAILURE MODE)</text>
+  <text x="1430" y="685" text-anchor="end" class="small">all prepared seeds stay open until evaluator-backed coverage</text>
+
+  <!-- Initial candidate path -->
+  <text x="360" y="708" class="label" fill="#9A6500">INITIALIZATION · RUN ONCE AFTER THE KNOWLEDGE REVIEW</text>
+
+  <rect x="360" y="721" width="176" height="68" rx="7" class="box"/>
+  <text x="377" y="745" class="module-title">Initial full program</text>
+  <text x="377" y="765" class="module-text">one strategy · no parent_ref</text>
+  <text x="377" y="781" class="small">complete executable candidate</text>
+  <path d="M536 755 L554 755" class="repair-flow"/>
+
+  <rect x="556" y="721" width="176" height="68" rx="7" class="box"/>
+  <text x="573" y="745" class="module-title">Smoke exact minimum</text>
+  <text x="573" y="765" class="module-text">default: 3 prepared seeds</text>
+  <text x="573" y="781" class="small">record every policy failure</text>
+  <path d="M732 755 L750 755" class="repair-flow"/>
+
+  <rect x="752" y="721" width="207" height="68" rx="7" fill="#fff8e8" stroke="#D48B00"/>
+  <text x="769" y="745" class="module-title">Evidence-usefulness gate</text>
+  <text x="769" y="765" class="module-text">dual-view evidence informative?</text>
+  <text x="769" y="781" class="small">may expand even at 0% success</text>
+  <path d="M959 755 L977 755" class="repair-flow"/>
+
+  <rect x="979" y="721" width="176" height="68" rx="7" class="box"/>
+  <text x="996" y="745" class="module-title">Expand or stop</text>
+  <text x="996" y="765" class="module-text">remaining active FM seeds</text>
+  <text x="996" y="781" class="small">uninformative evidence → stop</text>
+  <path d="M1155 755 L1173 755" class="repair-flow"/>
+
+  <rect x="1175" y="721" width="255" height="68" rx="7" fill="#f5e5f0" stroke="#B64E91" stroke-width="1.25"/>
+  <text x="1192" y="745" class="module-title">Update FM state</text>
+  <text x="1192" y="765" class="module-text">wins → current experience</text>
+  <text x="1192" y="781" class="small">failures stay active; coverage is evaluator-only</text>
+
+  <!-- Iterative refinement loop -->
+  <line x1="360" y1="805" x2="1430" y2="805" stroke="#dfc5d7"/>
+  <text x="360" y="826" class="label" fill="#A43E7D">REFINEMENT LOOP · ONE EVIDENCE-GROUNDED MECHANISM PER LATER CANDIDATE</text>
+
+  <rect x="360" y="839" width="176" height="69" rx="7" class="box"/>
+  <text x="377" y="862" class="module-title">Active failures</text>
+  <text x="377" y="882" class="module-text">temporary mechanism clusters</text>
+  <text x="377" y="899" class="small">wide + wrist + trajectory</text>
+  <path d="M536 873 L554 873" class="repair-flow"/>
+
+  <rect x="556" y="839" width="176" height="69" rx="7" class="box"/>
+  <text x="573" y="862" class="module-title">Choose parent</text>
+  <text x="573" y="882" class="module-text">current best / experience</text>
+  <text x="573" y="899" class="small">partial failed parent needs proof</text>
+  <path d="M732 873 L750 873" class="repair-flow"/>
+
+  <rect x="752" y="839" width="207" height="69" rx="7" class="box"/>
+  <text x="769" y="862" class="module-title">Later full candidate</text>
+  <text x="769" y="882" class="module-text">required parent_ref</text>
+  <text x="769" y="899" class="small">one declared mechanism/change</text>
+  <path d="M959 873 L977 873" class="repair-flow"/>
+
+  <rect x="979" y="839" width="176" height="69" rx="7" class="box"/>
+  <text x="996" y="862" class="module-title">Smoke → gate → expand</text>
+  <text x="996" y="882" class="module-text">3–8 seeds, then cluster</text>
+  <text x="996" y="899" class="small">dual-view before expand / stop</text>
+  <path d="M1155 873 L1173 873" class="repair-flow"/>
+
+  <rect x="1175" y="839" width="255" height="69" rx="7" fill="#f5e5f0" stroke="#B64E91" stroke-width="1.25"/>
+  <text x="1192" y="862" class="module-title">Evaluator-gated promotion</text>
+  <text x="1192" y="882" class="module-text">global baseline or targeted wins</text>
+  <text x="1192" y="899" class="small">unresolved failures remain active</text>
+
+  <path d="M1302 908 L1302 927 L448 927 L448 908" class="repair-feedback"/>
+
+  <!-- Knowledge, experience, and runtime dependencies -->
+  <path d="M448 633 L448 719" class="knowledge-flow"/>
+  <text x="461" y="653" class="small" fill="#9A6500">required before first candidate</text>
+  <path d="M315 857 L338 857" class="control"/>
+  <text x="321" y="849" class="small">READ</text>
+  <path d="M340 913 L317 913" class="control"/>
+  <text x="321" y="929" class="small">WRITE</text>
+  <path d="M1450 754 L1476 754" class="control"/>
+  <text x="1463" y="745" text-anchor="middle" class="small">execute</text>
+  <path d="M1478 873 L1452 873" class="thin-flow"/>
+  <text x="1464" y="892" text-anchor="middle" class="small">results</text>
+
+  <!-- Completion criterion -->
+  <rect x="340" y="958" width="1385" height="29" rx="6" fill="#edf8f3" stroke="#61ab93"/>
+  <text x="360" y="978" class="module-title">Full evaluator coverage</text>
+  <path d="M530 973 L573 973" class="thin-flow"/>
+  <text x="590" y="978" class="module-title">Bounded trajectory-continuity pass</text>
+  <text x="824" y="978" class="small">wide/wrist + trajectory; smallest shared fix if needed</text>
+  <path d="M1141 973 L1184 973" class="thin-flow"/>
+  <text x="1201" y="978" class="module-title">task.finish + retained trajectories</text>
+
+  <!-- Bottom guarantees -->
+  <text x="48" y="1034" class="label">CROSS-CUTTING GUARANTEES</text>
+  <rect x="48" y="1047" width="1704" height="59" rx="7" fill="#f7f9fb" stroke="#9eaaba"/>
+
+  <text x="72" y="1073" class="module-title">Reproducible contracts</text>
+  <text x="72" y="1092" class="small">resolved YAML · fingerprints</text>
+  <line x1="323" y1="1062" x2="323" y2="1092" stroke="#c7d0db"/>
+
+  <text x="347" y="1073" class="module-title">Failure admissibility</text>
+  <text x="347" y="1092" class="small">dual-view record before expand / stop</text>
+  <line x1="598" y1="1062" x2="598" y2="1092" stroke="#c7d0db"/>
+
+  <text x="622" y="1073" class="module-title">Immutable provenance</text>
+  <text x="622" y="1092" class="small">hashes · canonical result_ref</text>
+  <line x1="873" y1="1062" x2="873" y2="1092" stroke="#c7d0db"/>
+
+  <text x="897" y="1073" class="module-title">Exploration review</text>
+  <text x="897" y="1092" class="small">no gain → contact-path comparison</text>
+  <line x1="1148" y1="1062" x2="1148" y2="1092" stroke="#c7d0db"/>
+
+  <text x="1172" y="1073" class="module-title">Budget + isolation</text>
+  <text x="1172" y="1092" class="small">soft pause · evidence-backed abandon</text>
+  <line x1="1423" y1="1062" x2="1423" y2="1092" stroke="#c7d0db"/>
+
+  <text x="1447" y="1073" class="module-title">Shared evaluator</text>
+  <text x="1447" y="1092" class="small">evaluator alone grants coverage</text>
+
+  <!-- Legend -->
+  <line x1="48" y1="1130" x2="88" y2="1130" class="flow"/>
+  <text x="100" y="1134" class="small">data / artifact flow</text>
+  <line x1="242" y1="1130" x2="282" y2="1130" class="control"/>
+  <text x="294" y="1134" class="small">control / memory dependency</text>
+  <line x1="509" y1="1130" x2="549" y2="1130" class="knowledge-flow"/>
+  <text x="561" y="1134" class="small">prompt-required dependency</text>
+  <line x1="757" y1="1130" x2="797" y2="1130" class="repair-flow"/>
+  <text x="809" y="1134" class="small">FM research transition</text>
+  <line x1="1002" y1="1130" x2="1042" y2="1130" class="feedback"/>
+  <text x="1054" y="1134" class="small">closed-loop policy feedback</text>
+  <text x="1752" y="1134" text-anchor="end" class="small">VLA-Mender · prompt-faithful method overview</text>
+</svg>

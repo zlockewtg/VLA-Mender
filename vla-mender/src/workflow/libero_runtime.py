@@ -142,11 +142,19 @@ class LiberoRuntime:
         suite, _ = self.task_definition()
         return np.asarray(suite.get_task_init_states(self.task_id), dtype=np.float64)
 
-    def new_env(self, seed: int) -> Any:
+    def new_env(
+        self,
+        seed: int,
+        *,
+        camera_depths: bool = False,
+        camera_segmentations: str | None = None,
+    ) -> Any:
         env = self._env_cls(
             bddl_file_name=self._bddl,
             camera_heights=256,
             camera_widths=256,
+            camera_depths=camera_depths,
+            camera_segmentations=camera_segmentations,
             control_freq=self.control_frequency_hz,
             controller=controller_name(self.control_space),
         )
@@ -206,7 +214,13 @@ class LiberoRuntime:
         controller = getattr(env.env.robots[0], "controller", None)
         if controller is None:
             return {"controller_synchronized": False, "reason": "controller_unavailable"}
-        current = np.asarray(getattr(env.env.robots[0], "joint_positions", getattr(env.env.robots[0], "_joint_positions")), dtype=np.float64)
+        if hasattr(controller, "update"):
+            controller.update(force=True)
+        robot = env.env.robots[0]
+        current_value = getattr(robot, "joint_positions", None)
+        if current_value is None:
+            current_value = getattr(robot, "_joint_positions")
+        current = np.asarray(current_value, dtype=np.float64)
         if hasattr(controller, "update_initial_joints"):
             controller.update_initial_joints(current)
         if hasattr(controller, "update_initial_joints_goal"):

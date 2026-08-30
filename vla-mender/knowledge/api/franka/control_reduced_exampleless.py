@@ -7,7 +7,7 @@ examples from docstrings exposed via ``combined_doc()``.
 import inspect
 from typing import Any
 
-from capx.envs.base import BaseEnv
+from knowledge.api.env_protocol import BaseEnv
 from knowledge.api.franka.control_reduced import FrankaControlApiReduced
 
 
